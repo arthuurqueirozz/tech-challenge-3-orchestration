@@ -1,0 +1,54 @@
+# Matriz de requisitos - Fase 3
+
+Referência: TC NETT - Fase 3.pdf, oito páginas, texto conferido em 2026-09-13. IDs internos do plano. Nenhum requisito de implementação validado nesta execução.
+
+| ID | Página | Requisito e evidência mínima | Status | Caminho/commit | Comando ou demonstração | Resultado | Data |
+|---|---|---|---|---|---|---|---|---|
+| GW-001 | 3 | Gateway como única entrada: sem acesso externo direto às APIs no ambiente final. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| GW-002 | 3 | Todas as requisições externas de negócio recebidas pelo gateway: roteiro/smoke test usam seu endpoint. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| GW-003 | 3 | JWT validado: válido aceito; ausente, expirado e assinatura inválida rejeitados em rotas protegidas. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| GW-004 | 3 | Roteamento para UsersAPI/CatalogAPI: testar rotas públicas e protegidas de ambos. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| GW-005 | 5 | Rotas/políticas versionadas na orquestração e aplicáveis de forma reproduzível. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| SRV-001 | 4 | NotificationsAPI refatorada para função real, sem host web contínuo antigo. | Em andamento | Função f1f9c32; orquestração README | 18 testes locais; sam validate --lint; sam build | Local validado; deploy e stack integrada pendentes | 2026-09-14 |
+| SRV-002 | 4 | Trigger direto por fila/tópico: ambos os eventos provocam invocação real. | Em andamento | Função f1f9c32; orquestração README | 18 testes locais; sam validate --lint; sam build | Local validado; deploy e stack integrada pendentes | 2026-09-14 |
+| SRV-003 | 4 | Container antigo substituído: nenhum Deployment/serviço/container de NotificationsAPI na stack final. | Em andamento | Função f1f9c32; orquestração README | 18 testes locais; sam validate --lint; sam build | Local validado; deploy e stack integrada pendentes | 2026-09-14 |
+| SRV-004 | 5 | Código e IaC da função em repositório próprio, com testes e README de deploy. | Em andamento | Função f1f9c32; orquestração README | 18 testes locais; sam validate --lint; sam build | Local validado; deploy e stack integrada pendentes | 2026-09-14 |
+| SRV-005 | 6 | Link público real do novo repositório da função na documentação e entrega. | Em andamento | Função f1f9c32; orquestração README | 18 testes locais; sam validate --lint; sam build | Local validado; deploy e stack integrada pendentes | 2026-09-14 |
+| SRV-006 | 6 | Vídeo mostra função acionada e logs correlacionáveis em plataforma centralizada. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| OBS-001 | 4-5 | Uma opção completa de observabilidade escolhida e justificada no README central. | Em andamento | Função f1f9c32; orquestração README | 18 testes locais; sam validate --lint; sam build | Local validado; deploy e stack integrada pendentes | 2026-09-14 |
+| OBS-002 | 6 | Código aplicável atualizado com instrumentação verificável. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| OBS-003 | 6 | Solução escolhida demonstrada no vídeo sob tráfego real do ensaio. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| OBSA-001 | 4 | UsersAPI expõe métricas Prometheus e é coletada com sucesso. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| OBSA-002 | 4 | CatalogAPI expõe métricas Prometheus e é coletada com sucesso. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| OBSA-003 | 4 | Grafana mostra latência em tempo real; painel reage ao teste. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| OBSA-004 | 4 | Grafana mostra total de requisições e contagem por status HTTP. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| OBSA-005 | 4 | Grafana mostra taxa de erros coerente com erro controlado. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| OBSA-006 | 5 | Prometheus/Grafana implantados por manifests Kubernetes versionados. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| OBSA-007 | 6 | Vídeo mostra dashboard Grafana com métricas em tempo real. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| OBSB-001 | 4 | Somente Opção B: agentes em UsersAPI, CatalogAPI, PaymentsAPI e função. Não aplicável. | Não aplicável: Opção A escolhida | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| OBSB-002 | 4 | Somente Opção B: dashboard de latência, throughput e erros. Não aplicável. | Não aplicável: Opção A escolhida | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| OBSB-003 | 4 | Somente Opção B: todos os logs enviados e pesquisáveis. Não aplicável. | Não aplicável: Opção A escolhida | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| OBSB-004 | 4 | Somente Opção B: trace distribuído da compra. Não aplicável. | Não aplicável: Opção A escolhida | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| OBSB-005 | 5 | Somente Opção B: chaves APM via Kubernetes Secrets. Não aplicável. | Não aplicável: Opção A escolhida | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| OBSB-006 | 6 | Somente Opção B: vídeo do dashboard e trace na plataforma. Não aplicável. | Não aplicável: Opção A escolhida | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| DATA-001 | 5-6 | MongoDB ou DynamoDB real integrado; neste plano, DynamoDB. | Em andamento | Função f1f9c32; orquestração README | 18 testes locais; sam validate --lint; sam build | Local validado; deploy e stack integrada pendentes | 2026-09-14 |
+| DATA-002 | 5 | Caso NoSQL de dados flexíveis/alta volumetria documentado e demonstrado por logs de eventos reais. | Em andamento | Função f1f9c32; orquestração README | 18 testes locais; sam validate --lint; sam build | Local validado; deploy e stack integrada pendentes | 2026-09-14 |
+| DATA-003 | 5 | Driver oficial .NET: `AWSSDK.DynamoDBv2` referenciado e utilizado. | Em andamento | Função f1f9c32; orquestração README | 18 testes locais; sam validate --lint; sam build | Local validado; deploy e stack integrada pendentes | 2026-09-14 |
+| DATA-004 | 5-6 | Cache distribuído externo integrado a consulta real; neste plano, Redis. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| DATA-005 | 5 | Cache temporário reduz acesso ao banco: miss, hit, expiração e invalidação comprovados. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| DATA-006 | 5 | `StackExchange.Redis` ou `IDistributedCache` efetivamente utilizado. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| DATA-007 | 6 | Código atualizado com drivers de NoSQL/cache nos projetos responsáveis. | Em andamento | Função f1f9c32; orquestração README | 18 testes locais; sam validate --lint; sam build | Local validado; deploy e stack integrada pendentes | 2026-09-14 |
+| DATA-008 | 6 | Vídeo explica arquitetura, caso de uso e integração NoSQL. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| REP-001 | 5-6 | Orquestração independente com manifests do gateway e da stack de monitoramento. | Em andamento | Função f1f9c32; orquestração README | 18 testes locais; sam validate --lint; sam build | Local validado; deploy e stack integrada pendentes | 2026-09-14 |
+| REP-002 | 6 | README central explica stack e subida completa, validada por execução do zero. | Em andamento | Função f1f9c32; orquestração README | 18 testes locais; sam validate --lint; sam build | Local validado; deploy e stack integrada pendentes | 2026-09-14 |
+| REP-003 | 6 | Links de todos os repositórios ativos incluídos e conferidos. | Em andamento | Função f1f9c32; orquestração README | 18 testes locais; sam validate --lint; sam build | Local validado; deploy e stack integrada pendentes | 2026-09-14 |
+| ENT-001 | 6 | Vídeo final tem no máximo 20 minutos. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| ENT-002 | 6 | Vídeo demonstra roteamento e segurança pelo gateway. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| ENT-003 | 6 | Vídeo demonstra invocação da função e logs centralizados. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| ENT-004 | 6 | Vídeo demonstra observabilidade da opção escolhida. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| ENT-005 | 6 | Vídeo explica integração NoSQL. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| ENT-006 | 6-7 | Relatório PDF/TXT contém nome do grupo. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| ENT-007 | 6-7 | Relatório contém participantes e usernames Discord. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| ENT-008 | 7 | Relatório contém URL válida da documentação central. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| ENT-009 | 7 | Relatório contém URLs públicas válidas dos repositórios. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
+| ENT-010 | 7 | Relatório contém URL acessível do vídeo. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |

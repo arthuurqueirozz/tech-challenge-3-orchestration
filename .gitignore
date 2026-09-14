@@ -1,0 +1,9 @@
+.env
+.env.*
+!.env.example
+*.local.*
+*.log
+*.zip
+.aws/
+credentials
+artifacts/
