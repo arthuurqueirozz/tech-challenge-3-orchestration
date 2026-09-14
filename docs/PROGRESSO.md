@@ -4,9 +4,20 @@ Atualizado em 2026-09-14.
 
 ## Etapa atual
 
-Etapas 0 a 4 concluídas em seus gates técnicos. Produtores adaptados e ensaio integrado com AWS real aprovado: cadastro, compra aprovada/rejeitada, falhas parciais e recuperação, com logs correlacionados. Evidências em `tech-challenge-3-orchestration/docs/EVIDENCIAS-ETAPA-4.md`; gates anteriores em `docs/EVIDENCIAS-CLOUD.md`. Próxima etapa: 5, Redis no CatalogAPI. Kind/Kong, métricas, integração final, vídeo e relatório ainda pendentes.
+Etapas 0 a 5 concluídas em seus gates técnicos. Redis validado nas consultas públicas do CatalogAPI: hit evita SELECT, TTL e invalidação funcionam, falhas preservam SQL e disponibilidade. Evidências em `tech-challenge-3-orchestration/docs/EVIDENCIAS-ETAPA-5.md`. Produtores/cloud das etapas anteriores continuam documentados em EVIDENCIAS-ETAPA-4.md e EVIDENCIAS-CLOUD.md. Próxima etapa: 6, métricas e dashboard Prometheus/Grafana. Kind/Kong, métricas, integração final, vídeo e relatório ainda pendentes.
 
-## Etapa 4 — estado atual
+## Etapa 5 — estado atual
+
+- CatalogAPI usa IDistributedCache com Microsoft.Extensions.Caching.StackExchangeRedis 8.0.28, configuração tipada e decorador do serviço SQL existente. Cache somente em lista/detalhe público; compras e biblioteca continuam consultando SQL.
+- Chaves v1 para lista ativa ordenada por título e detalhe por GUID. TTL absoluto 60 s por padrão, sem renovação em hit; invalidação de lista/detalhe após commit de create/update/delete. Falhas Redis têm fallback; entradas antigas podem persistir até TTL em falha de invalidação/concorrência.
+- Health Redis Degraded/200 mantém disponibilidade; SQL/RabbitMQ continuam obrigatórios. Startup sem Redis e reconexão automática foram validados.
+- Testes CatalogAPI: 29 passaram, incluindo 19 herdados e 10 de cache com SQLite/contagem SQL. Docker build e Compose config passaram.
+- Ensaio real com Redis 7.4.11/SQL Server: 21 verificações passaram. Lista/detalhe: 1 SELECT em miss e 0 em hit; expiração volta a consultar SQL. CRUD, fallback, startup sem Redis e recuperação comprovados.
+- Ambiente compose.stage5.yaml isolado, sem AWS ou produtores. Ensaio encerrado com quatro containers parados e volumes SQL/RabbitMQ preservados. Nenhum recurso AWS foi criado/ativado/alterado nesta etapa.
+- Guia em `tech-challenge-3-orchestration/docs/ETAPA-5.md`. JWT sintético somente em memória no smoke; arquivos de segredos/evidências brutas ignorados pelo Git. Manifests finais Redis/Kind/Kong ainda serão consolidados na etapa integrada.
+- Commit CatalogAPI: `c21a55e`, branch `fase-3`; tag `fase-2-final` preservada. Orquestração registra o ensaio e as evidências no commit desta atualização.
+
+## Etapa 4 — gate anterior
 
 - UsersAPI envia UserCreatedEvent em JSON direto ao SQS pelo outbox existente, mantendo EventId, backoff e conclusão somente após envio. RabbitMQ removido porque não restou outro uso. Testes: 28 passaram (23 herdados + 5 novos).
 - PaymentsAPI mantém RabbitMQ para CatalogAPI e acrescenta SQS para notificações. Exceções propagam ao consumer; retries em 5/15/30 segundos, depois fila de erro. Sem novo outbox. Testes: 12 passaram (8 herdados + 4 novos).
@@ -90,7 +101,7 @@ Conta confirmada pelo usuário: conta própria, sob sua responsabilidade. Qualqu
 4. Adaptar o preparo das credenciais temporárias para Secrets locais do Kind na etapa integrada; manter arquivos fora do Git.
 5. Destino GitHub autorizado: usuário pessoal `arthuurqueirozz`, confirmado pela API autenticada; autorização do grupo para republicação confirmada pelo usuário. Não foi inventada licença para código do grupo.
 6. Docker Linux iniciado e recursos conferidos; verificar portas ao preparar a stack integrada. Kind/jq já instalados.
-7. Gates cloud das Etapas 2/3 e produtores da Etapa 4 concluídos; avançar para Redis (Etapa 5). Manter integração final, vídeo/relatório e demais entregáveis pendentes.
+7. Gates cloud, produtores e Redis (Etapas 2 a 5) concluídos; avançar para métricas/dashboard (Etapa 6). Manter integração final, vídeo/relatório e demais entregáveis pendentes.
 
 Os pré-requisitos não exigem criar manualmente filas, tabela ou função: esses recursos serão declarados no SAM na etapa prevista. S3 é suporte ao upload dos artefatos de deploy, não um novo componente de negócio.
 

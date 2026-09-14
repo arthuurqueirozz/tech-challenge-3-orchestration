@@ -1,0 +1,69 @@
+# Catalog cache gate, derived from the stage 4 SQL/RabbitMQ/Catalog setup.
+# Local only: no AWS credentials, producers or cloud triggers required.
+name: fcg-fase3-stage5
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: ${FCG_SQL_PASSWORD:?Run scripts/prepare-stage5.ps1}
+    volumes:
+      - stage5-sql:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ': > /dev/tcp/127.0.0.1/1433'"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 20s
+  rabbitmq:
+    image: rabbitmq:4-management
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: fcg-stage5
+      RABBITMQ_DEFAULT_PASS: ${FCG_RABBIT_PASSWORD:?Run scripts/prepare-stage5.ps1}
+    volumes:
+      - stage5-rabbit:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
+    # Disposable cache, no persisted data and no host port.
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 2s
+      retries: 10
+  catalog-api:
+    build:
+      context: ../tech-challenge-2-catalog-api
+    image: fcg-catalog:stage5
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__CatalogDatabase: "Server=sqlserver,1433;Database=FcgCatalogDb;User Id=sa;Password=${FCG_SQL_PASSWORD};TrustServerCertificate=True;Encrypt=False"
+      Jwt__Issuer: FCG
+      Jwt__Audience: FCG
+      Jwt__Key: ${FCG_JWT_KEY:?Run scripts/prepare-stage5.ps1}
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Username: fcg-stage5
+      RabbitMq__Password: ${FCG_RABBIT_PASSWORD}
+      CatalogCache__Configuration: redis:6379
+      CatalogCache__TtlSeconds: "5"
+      CatalogCache__TimeoutMilliseconds: "500"
+      Serilog__MinimumLevel__Override__Microsoft.EntityFrameworkCore.Database.Command: Information
+    ports:
+      - "127.0.0.1:18081:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      # Cache availability is deliberately not a startup/readiness dependency.
+volumes:
+  stage5-sql:
+  stage5-rabbit:

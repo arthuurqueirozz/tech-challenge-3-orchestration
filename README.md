@@ -68,8 +68,14 @@ com AWS real, falhas parciais, recuperação e logs dos cinco eventos sintético
 As roles dos produtores permitem somente SendMessage na respectiva fila;
 os containers recebem sessões STS temporárias. Ensaio encerrado com containers
 parados e gatilhos Lambda desabilitados, preservando dados.
-Etapas 5 a 8 ainda precisam entregar cache, métricas, gateway, manifests
-integrados e smoke test final. Vídeo e relatório permanecem pendentes.
+Etapa 5 concluída: Redis no catálogo público com TTL/invalidação e fallback SQL;
+29 testes CatalogAPI e 21 verificações HTTP com Redis/SQL reais passaram.
+Hits de lista/detalhe reduziram SELECTs de 1 para 0. Startup sem Redis e
+reconexão também validados, sem mudanças AWS.
+[Executar o ensaio de cache](docs/ETAPA-5.md) e
+[consultar evidências](docs/EVIDENCIAS-ETAPA-5.md).
+Etapas 6 a 8 ainda precisam entregar métricas, gateway, manifests integrados e
+smoke test final. Vídeo e relatório permanecem pendentes.
 
 O README central receberá os comandos validados de build/carga no Kind,
 deploy integrado, inicialização, acesso via Kong, dashboard, diagnóstico e
