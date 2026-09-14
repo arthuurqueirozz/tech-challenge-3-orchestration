@@ -13,8 +13,8 @@ declarados no repositório independente da função por AWS SAM.
 Opção A de observabilidade: Prometheus coleta UsersAPI/CatalogAPI e Grafana
 exibe latência, total/contagem por status HTTP e taxa de erros. Essa opção
 atende à página 4 do PDF com ferramentas locais e manifests versionados.
-PaymentsAPI mantém a mensageria RabbitMQ com CatalogAPI; SQS será acrescentado
-somente aos eventos de notificação. NotificationsAPI antiga é apenas referência.
+PaymentsAPI mantém a mensageria RabbitMQ com CatalogAPI e envia notificações ao
+SQS. UsersAPI usa SQS pelo outbox existente. NotificationsAPI antiga é apenas referência.
 
 ## Repositórios
 
@@ -61,8 +61,15 @@ Etapas 2 e 3: stack AWS criada; 18 testes locais, lint e build SAM passaram.
 Smoke real passou em 18 verificações, incluindo os dois eventos por SQS,
 duplicidade, lote parcial e recuperação automática após falha de dependência.
 Resultados e limites em [EVIDENCIAS-CLOUD.md](docs/EVIDENCIAS-CLOUD.md).
-Etapas 4 a 8 ainda precisam adaptar produtores, cache, métricas, gateway,
-manifests integrados e smoke test. Vídeo e relatório permanecem pendentes.
+Etapa 4 concluída: 28 testes UsersAPI, 12 PaymentsAPI e 11 verificações integradas
+com AWS real, falhas parciais, recuperação e logs dos cinco eventos sintéticos.
+[Executar o ensaio dos produtores](docs/ETAPA-4.md) e
+[consultar evidências](docs/EVIDENCIAS-ETAPA-4.md).
+As roles dos produtores permitem somente SendMessage na respectiva fila;
+os containers recebem sessões STS temporárias. Ensaio encerrado com containers
+parados e gatilhos Lambda desabilitados, preservando dados.
+Etapas 5 a 8 ainda precisam entregar cache, métricas, gateway, manifests
+integrados e smoke test final. Vídeo e relatório permanecem pendentes.
 
 O README central receberá os comandos validados de build/carga no Kind,
 deploy integrado, inicialização, acesso via Kong, dashboard, diagnóstico e

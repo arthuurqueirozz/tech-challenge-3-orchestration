@@ -1,0 +1,100 @@
+# Isolated producer integration test. Final Kind/Kong stack is delivered in later stages.
+name: fcg-fase3-stage4
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: ${FCG_SQL_PASSWORD:?Run scripts/prepare-stage4.ps1}
+    volumes:
+      - stage4-sql:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ': > /dev/tcp/127.0.0.1/1433'"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 20s
+  rabbitmq:
+    image: rabbitmq:4-management
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${FCG_RABBIT_USER:?Run scripts/prepare-stage4.ps1}
+      RABBITMQ_DEFAULT_PASS: ${FCG_RABBIT_PASSWORD:?Run scripts/prepare-stage4.ps1}
+    ports:
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - stage4-rabbit:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+  users-api:
+    build:
+      context: ../tech-challenge-2-users-api
+    image: fcg-users:stage4
+    env_file: users-runtime.local.env
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__UsersDatabase: "Server=sqlserver,1433;Database=FcgUsersDb;User Id=sa;Password=${FCG_SQL_PASSWORD};TrustServerCertificate=True;Encrypt=False"
+      Jwt__Issuer: FCG
+      Jwt__Audience: FCG
+      Jwt__Key: ${FCG_JWT_KEY:?Run scripts/prepare-stage4.ps1}
+      Sqs__Region: us-east-1
+      Sqs__QueueUrl: ${USER_CREATED_QUEUE_URL:?Run scripts/prepare-stage4.ps1}
+      AdminSeed__Enabled: "true"
+      AdminSeed__Name: FCG Admin
+      AdminSeed__Email: admin@fcg.local
+      AdminSeed__Password: ${FCG_ADMIN_PASSWORD:?Run scripts/prepare-stage4.ps1}
+    ports:
+      - "127.0.0.1:18080:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+  catalog-api:
+    build:
+      context: ../tech-challenge-2-catalog-api
+    image: fcg-catalog:stage4
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__CatalogDatabase: "Server=sqlserver,1433;Database=FcgCatalogDb;User Id=sa;Password=${FCG_SQL_PASSWORD};TrustServerCertificate=True;Encrypt=False"
+      Jwt__Issuer: FCG
+      Jwt__Audience: FCG
+      Jwt__Key: ${FCG_JWT_KEY}
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Port: "5672"
+      RabbitMq__VirtualHost: /
+      RabbitMq__Username: ${FCG_RABBIT_USER}
+      RabbitMq__Password: ${FCG_RABBIT_PASSWORD}
+      RabbitMq__PaymentProcessedQueue: catalog-payment-processed
+    ports:
+      - "127.0.0.1:18081:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+  payments-api:
+    build:
+      context: ../tech-challenge-2-payments-api
+    image: fcg-payments:stage4
+    env_file: payments-runtime.local.env
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Port: "5672"
+      RabbitMq__VirtualHost: /
+      RabbitMq__Username: ${FCG_RABBIT_USER}
+      RabbitMq__Password: ${FCG_RABBIT_PASSWORD}
+      RabbitMq__OrderPlacedQueue: payments-order-placed
+      Payment__ApprovalLimit: "100.00"
+      Sqs__Region: us-east-1
+      Sqs__QueueUrl: ${PAYMENT_PROCESSED_QUEUE_URL:?Run scripts/prepare-stage4.ps1}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+volumes:
+  stage4-sql:
+  stage4-rabbit:

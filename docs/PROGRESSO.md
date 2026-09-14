@@ -4,9 +4,20 @@ Atualizado em 2026-09-14.
 
 ## Etapa atual
 
-Etapas 0 a 3 concluídas em seus gates técnicos. Stack SAM criada em us-east-1 com a política FCGFase3Deploy anexada pelo responsável. Ambos os eventos acionaram a Lambda real, com logs no CloudWatch e simulações duráveis no DynamoDB. Smoke cloud final passou em 18 verificações, incluindo duplicidade, lote parcial e recuperação automática após erro real de acesso ao DynamoDB. Evidências em `tech-challenge-3-orchestration/docs/EVIDENCIAS-CLOUD.md`. Estimativa de custos preparada sem créditos ou descontos gratuitos. Próxima etapa: 4, adaptação dos produtores; ainda não implementada.
+Etapas 0 a 4 concluídas em seus gates técnicos. Produtores adaptados e ensaio integrado com AWS real aprovado: cadastro, compra aprovada/rejeitada, falhas parciais e recuperação, com logs correlacionados. Evidências em `tech-challenge-3-orchestration/docs/EVIDENCIAS-ETAPA-4.md`; gates anteriores em `docs/EVIDENCIAS-CLOUD.md`. Próxima etapa: 5, Redis no CatalogAPI. Kind/Kong, métricas, integração final, vídeo e relatório ainda pendentes.
 
-## Implementação e evidências atuais
+## Etapa 4 — estado atual
+
+- UsersAPI envia UserCreatedEvent em JSON direto ao SQS pelo outbox existente, mantendo EventId, backoff e conclusão somente após envio. RabbitMQ removido porque não restou outro uso. Testes: 28 passaram (23 herdados + 5 novos).
+- PaymentsAPI mantém RabbitMQ para CatalogAPI e acrescenta SQS para notificações. Exceções propagam ao consumer; retries em 5/15/30 segundos, depois fila de erro. Sem novo outbox. Testes: 12 passaram (8 herdados + 4 novos).
+- Compose de desenvolvimento derivado da Fase 2 com SQL Server, RabbitMQ e três APIs, sem NotificationsAPI histórica. CatalogAPI não sofreu alterações de código; integração final em Kind será feita posteriormente.
+- Gate real: 10 verificações do smoke + correlação dos cinco eventos no CloudWatch passaram. SQL outbox, biblioteca, DynamoDB e logs conferidos. Falha Users preservou cadastro/EventId; falha parcial Payments recuperou notificação com mesmo OrderId após redelivery, sem duplicar jogo.
+- SAM lint/build e builds Docker passaram. Política FCGFase3Deploy ampliada somente no escopo das duas roles nomeadas de produtores, após atualização pelo responsável. SAM criou ambas; cada runtime recebe somente SendMessage na própria fila, via credenciais STS de uma hora, em arquivos locais ignorados pelo Git.
+- Encerramento conferido: stack UPDATE_COMPLETE, NotificationsEnabled=false, dois mappings Disabled, Lambda Active/Successful, filas drenadas e cinco containers parados. Volumes e recursos preservados; S3 totalizou 1.615.905 bytes. Fatura real ainda não apurada.
+- Roteiro reproduzível em `tech-challenge-3-orchestration/docs/ETAPA-4.md`. Segredos e JWTs não entram nas evidências publicadas.
+- Commits da etapa: UsersAPI `ca66442`, PaymentsAPI `63ef444`, função/IAM `4ed2cdc`; CatalogAPI permanece `ecd30fd`. Orquestração registra roteiro, scripts e evidências no commit desta atualização documental.
+
+## Histórico das etapas 0 a 3
 
 - Publicação confirmada em 2026-09-14: três forks em `arthuurqueirozz` com branch `fase-3` e tag `fase-2-final` publicadas; função `f1f9c32` e orquestração inicial `594d905` em main. `gh repo view` confirmou os cinco URLs e Git local confirmou acompanhamento dos respectivos remotos sem alterações pendentes. Links no README de orquestração. A NotificationsAPI histórica não foi publicada novamente nem alterada.
 - Nova função: `tech-challenge-3-notifications-function`, commit `f1f9c32`. Contratos preservados; handlers para os dois eventos, falhas parciais de lote, escrita condicional DynamoDB, logs estruturados sem nome/e-mail e template SAM.
@@ -61,7 +72,7 @@ READMEs dos quatro projetos lidos; soluções e projetos identificados. `git ls-
 | PaymentsAPI | `cd1ca5f8410b55aedca554346e4c1acfa25d3012` |
 | NotificationsAPI histórica | `f97a5dd16b706bfcab95328fec2185fab5c83ca2` |
 
-Baseline compilada e testes executados em Release com `dotnet run --project tests/FCG.<Projeto>.Tests/FCG.<Projeto>.Tests.csproj --configuration Release`, usando o runner nativo xUnit v3. Users: 23, Catalog: 19, Payments: 8, Notifications: 3; total 53 testes, todos passaram, sem falhas ou pulados. A restauração dentro do sandbox falhou sem diagnóstico de compilação; a execução autorizada fora dele concluiu os quatro projetos. Código das quatro bases permanece inalterado; stack integrada ainda não validada.
+Baseline compilada e testes executados em Release com `dotnet run --project tests/FCG.<Projeto>.Tests/FCG.<Projeto>.Tests.csproj --configuration Release`, usando o runner nativo xUnit v3. Users: 23, Catalog: 19, Payments: 8, Notifications: 3; total 53 testes, todos passaram, sem falhas ou pulados. A restauração dentro do sandbox falhou sem diagnóstico de compilação; a execução autorizada fora dele concluiu os quatro projetos. Estes são os resultados da baseline preservada nas tags; alterações e testes da etapa 4 estão registrados acima.
 
 ## Pendências
 
@@ -74,12 +85,12 @@ Diagnóstico de autenticação (2026-09-13): tentativas normal e `--remote` do u
 Conta confirmada pelo usuário: conta própria, sob sua responsabilidade. Qualquer região permitida; adotada `us-east-1`, sugestão do plano e não exigência do PDF. Preferência de custo: mínimo possível, visando permanecer nos benefícios do Free Tier. Teto mensal confirmado: USD 1 para o projeto. Alertas não bloqueiam automaticamente cobranças. Uso de Learner Lab não se aplica.
 
 1. Aplicar os limites de sessões e volume de `docs/CUSTOS.md` da orquestração; conferir uso real após o primeiro ensaio frente ao teto de USD 1/mês. Não presumir gratuidade; ausência de créditos já confirmada.
-2. Perfil `fiap-fase3` validado com STS; preservar credenciais somente no mecanismo local e preparar posteriormente credenciais de execução dos produtores com SendMessage. Não injetar a política de deploy nos containers.
+2. Perfil `fiap-fase3` validado com STS; produtores já usam roles restritas com SendMessage. Renovar sessões temporárias pelo script prepare-stage4 antes dos ensaios e recriar containers para carregar os valores.
 3. Política de deploy validada na criação real; remover recursos e outros caminhos ainda exigem validação quando executados.
-4. Preparar acesso de execução dos produtores restrito às filas, sem injetar a identidade de deploy nos containers.
+4. Adaptar o preparo das credenciais temporárias para Secrets locais do Kind na etapa integrada; manter arquivos fora do Git.
 5. Destino GitHub autorizado: usuário pessoal `arthuurqueirozz`, confirmado pela API autenticada; autorização do grupo para republicação confirmada pelo usuário. Não foi inventada licença para código do grupo.
 6. Docker Linux iniciado e recursos conferidos; verificar portas ao preparar a stack integrada. Kind/jq já instalados.
-7. Gates cloud das Etapas 2/3 concluídos; avançar para produtores e etapas dependentes. Manter integração final, vídeo/relatório e demais entregáveis pendentes.
+7. Gates cloud das Etapas 2/3 e produtores da Etapa 4 concluídos; avançar para Redis (Etapa 5). Manter integração final, vídeo/relatório e demais entregáveis pendentes.
 
 Os pré-requisitos não exigem criar manualmente filas, tabela ou função: esses recursos serão declarados no SAM na etapa prevista. S3 é suporte ao upload dos artefatos de deploy, não um novo componente de negócio.
 
@@ -94,4 +105,4 @@ Os pré-requisitos não exigem criar manualmente filas, tabela ou função: esse
 - https://kind.sigs.k8s.io/docs/user/quick-start/
 - https://jqlang.org/download/
 
-Matriz inicial: `MATRIZ-REQUISITOS.md`. Status não representam validação de implementação.
+Matriz: `MATRIZ-REQUISITOS.md`. Somente linhas com evidência correspondente são marcadas como validadas.
