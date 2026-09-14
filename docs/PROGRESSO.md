@@ -4,7 +4,7 @@ Atualizado em 2026-09-14.
 
 ## Etapa atual
 
-Etapa 0 concluída: PDF e escopo conferidos, ambiente identificado, conta/região/responsável/teto/destino definidos e identidade IAM validada. Etapa 1 concluída: três tags/branches de evolução e dois novos repositórios independentes, todos publicados nos destinos do usuário. Etapa 2 implementada localmente, com modelo de simulação atômica DynamoDB antecipando a dependência da Etapa 3. O gate cloud das Etapas 2/3 está pendente de permissões e avaliação de custos. Nenhum recurso AWS de aplicação foi criado.
+Etapa 0 concluída: PDF e escopo conferidos, ambiente identificado, conta/região/responsável/teto/destino definidos e identidade IAM validada. Etapa 1 concluída: três tags/branches de evolução e dois novos repositórios independentes, todos publicados nos destinos do usuário. Etapa 2 implementada localmente, com modelo de simulação atômica DynamoDB antecipando a dependência da Etapa 3. O gate cloud das Etapas 2/3 está pendente de permissões. Estimativa de custos preparada sem créditos ou descontos gratuitos. Nenhum recurso AWS de aplicação foi criado.
 
 ## Implementação e evidências atuais
 
@@ -14,6 +14,8 @@ Etapa 0 concluída: PDF e escopo conferidos, ambiente identificado, conta/regiã
 - `sam validate --lint --template-file template.yaml --region us-east-1`: template válido.
 - `sam build --template-file template.yaml`: sucesso; pacote .NET 8/linux-x64 preparado em `.aws-sam/build/NotificationsFunction` e template em `.aws-sam/build/template.yaml`. SAM instalou Amazon.Lambda.Tools 7.0.0. Execução fora do sandbox necessária para seus metadados locais.
 - SQS: duas filas, visibility 180s, retenção 4 dias, resposta parcial, concorrência 2 por trigger. Lambda 256 MB/30s; DynamoDB on-demand; logs 7 dias.
+- Controle de custo: parâmetro SAM `NotificationsEnabled=false` por padrão; habilitar explicitamente nos testes cloud e desabilitar ao encerrar. Lint e build SAM passaram novamente após a alteração. Gatilhos pausados não interrompem retenção de mensagens nem cobrança de armazenamento.
+- Sem créditos promocionais, conforme informado pelo responsável em 2026-09-14. Estimativa sem benefícios gratuitos: USD 0,20344 para até 20 horas mensais de gatilhos ativos e 1.000 invocações, sob as demais hipóteses de `tech-challenge-3-orchestration/docs/CUSTOS.md`. Reserva operacional de USD 0,30; não representa garantia de teto. Validar uso real na primeira sessão.
 - Garantia do simulador: o efeito é o registro durável atômico no DynamoDB, não e-mail externo. Logs são projeção de diagnóstico. Retry de resposta perdida não duplica o registro; itens incompletos/conflitantes não são reconhecidos. Limitações descritas no README.
 - Política de deploy pronta em `tech-challenge-3-notifications-function/iam/deploy-policy.template.json`; versão preenchida em `iam/deploy-policy.local.json`, ignorada pelo Git. Gerador validado; política ainda não anexada nem validada em deploy real.
 - Orquestração: README inicial com arquitetura/Opção A, links de destino, pré-requisitos e placeholders em `.env.example`. Manifests finais ainda não implementados.
@@ -60,7 +62,7 @@ Baseline compilada e testes executados em Release com `dotnet run --project test
 
 ## Pendências
 
-Autenticação resolvida: STS confirmou `fiap-fase3-cli` em `us-east-1` após o usuário configurar a chave IAM local. As consultas ListAttachedUserPolicies, ListUserPolicies e GetFreeTierUsage foram negadas por ausência de permissão. Antes do deploy, o responsável deve revisar e anexar a política gerenciada `FCGFase3Deploy` conforme `iam/README.md`, e informar plano/créditos/validade. Instruções para consultar Billing/Free Tier/Créditos já fornecidas. Histórico da falha OAuth mantido abaixo apenas para explicar a adaptação.
+Autenticação resolvida: STS confirmou `fiap-fase3-cli` em `us-east-1` após o usuário configurar a chave IAM local. As consultas ListAttachedUserPolicies, ListUserPolicies e GetFreeTierUsage continuam negadas por ausência de permissão na verificação de 2026-09-14. Antes do deploy, o responsável deve revisar e anexar a política gerenciada `FCGFase3Deploy` conforme `iam/README.md`. Ausência de créditos confirmada; a estimativa não depende de benefícios gratuitos da conta. Histórico da falha OAuth mantido abaixo apenas para explicar a adaptação.
 
 Usuário confirmou autenticação no navegador como root. A documentação atual permite root no `aws login` sem política adicional `SignInLocalDevelopmentAccess`; portanto, não atribuir `TOKEN_EXPIRED` à ausência dessa política ou ao tipo de usuário. Tentativa `--remote` também falhou com `TOKEN_EXPIRED`, conforme saída enviada pelo usuário. Nenhum código de autorização foi reutilizado ou registrado neste arquivo.
 
@@ -68,7 +70,7 @@ Diagnóstico de autenticação (2026-09-13): tentativas normal e `--remote` do u
 
 Conta confirmada pelo usuário: conta própria, sob sua responsabilidade. Qualquer região permitida; adotada `us-east-1`, sugestão do plano e não exigência do PDF. Preferência de custo: mínimo possível, visando permanecer nos benefícios do Free Tier. Teto mensal confirmado: USD 1 para o projeto. Alertas não bloqueiam automaticamente cobranças. Uso de Learner Lab não se aplica.
 
-1. Conferir plano, créditos, validade e uso atual dos benefícios gratuitos da conta e estimar custo frente ao teto de USD 1/mês antes do deploy. Não presumir gratuidade.
+1. Aplicar os limites de sessões e volume de `docs/CUSTOS.md` da orquestração; conferir uso real após o primeiro ensaio frente ao teto de USD 1/mês. Não presumir gratuidade; ausência de créditos já confirmada.
 2. Perfil `fiap-fase3` validado com STS; preservar credenciais somente no mecanismo local e preparar posteriormente credenciais de execução dos produtores com SendMessage. Não injetar a política de deploy nos containers.
 3. Anexar/revalidar a política para CloudFormation, S3 de artefatos, Lambda, SQS, DynamoDB, CloudWatch e criação/passagem da role IAM. Identidade válida não comprova essas permissões.
 4. Verificar as permissões IAM reais da conta própria e a role de execução da função antes de finalizar o SAM.

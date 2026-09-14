@@ -46,6 +46,9 @@ instalar ferramentas. Os scripts Bash herdados serão executados pelo Git Bash.
 Copie `.env.example` para `.env` e preencha apenas localmente.
 
 Perfil AWS: `fiap-fase3`; região: `us-east-1`; teto solicitado: USD 1/mês.
+Sem créditos promocionais. [Estimativa e limites de uso](docs/CUSTOS.md):
+cerca de USD 0,20 para as sessões mensais descritas, sem descontos gratuitos.
+O SAM mantém os gatilhos pausados por padrão; habilitar nos testes e pausar ao terminar.
 O login IAM via chave foi configurado pelo responsável após falha de OAuth.
 O perfil do host não é automaticamente disponibilizado aos containers:
 a etapa integrada deve renderizar Secrets locais, ignorados pelo Git.
@@ -55,7 +58,7 @@ A Lambda utilizará uma execution role.
 
 Etapa 1: baselines da Fase 2 passaram em 53 testes; branches e tags preservadas.
 Etapa 2: função e SAM preparados; 18 testes locais passaram, lint e build SAM
-concluídos. Deploy depende de permissões e avaliação do uso/créditos da conta.
+concluídos. Deploy depende de anexar a política IAM preparada; estimativa de custos documentada.
 O modelo atômico de simulação no DynamoDB antecipa a dependência da Etapa 3,
 cujos testes no store real permanecem pendentes. Não há evidência cloud ainda.
 Etapas 4 a 8 ainda precisam adaptar produtores, cache, métricas, gateway,
