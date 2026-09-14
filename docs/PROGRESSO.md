@@ -4,14 +4,15 @@ Atualizado em 2026-09-14.
 
 ## Etapa atual
 
-Etapa 0 concluída: PDF e escopo conferidos, ambiente identificado, conta/região/responsável/teto/destino definidos e identidade IAM validada. Etapa 1 preparada localmente: três tags/branches de evolução e dois novos repositórios independentes. Etapa 2 implementada localmente, com modelo de simulação atômica DynamoDB antecipando a dependência da Etapa 3. O gate cloud das Etapas 2/3 está pendente de permissões e avaliação de custos. Nenhum recurso AWS de aplicação foi criado.
+Etapa 0 concluída: PDF e escopo conferidos, ambiente identificado, conta/região/responsável/teto/destino definidos e identidade IAM validada. Etapa 1 concluída: três tags/branches de evolução e dois novos repositórios independentes, todos publicados nos destinos do usuário. Etapa 2 implementada localmente, com modelo de simulação atômica DynamoDB antecipando a dependência da Etapa 3. O gate cloud das Etapas 2/3 está pendente de permissões e avaliação de custos. Nenhum recurso AWS de aplicação foi criado.
 
 ## Implementação e evidências atuais
 
+- Publicação confirmada em 2026-09-14: três forks em `arthuurqueirozz` com branch `fase-3` e tag `fase-2-final` publicadas; função `f1f9c32` e orquestração inicial `594d905` em main. `gh repo view` confirmou os cinco URLs e Git local confirmou acompanhamento dos respectivos remotos sem alterações pendentes. Links no README de orquestração. A NotificationsAPI histórica não foi publicada novamente nem alterada.
 - Nova função: `tech-challenge-3-notifications-function`, commit `f1f9c32`. Contratos preservados; handlers para os dois eventos, falhas parciais de lote, escrita condicional DynamoDB, logs estruturados sem nome/e-mail e template SAM.
 - Testes da função: 18 passaram via `dotnet run --project tests/FCG.Notifications.Function.Tests/FCG.Notifications.Function.Tests.csproj --configuration Release`. Testes em memória não substituem integração real.
 - `sam validate --lint --template-file template.yaml --region us-east-1`: template válido.
-- `sam build --template-file template.yaml`: sucesso; gerado ZIP .NET 8/linux-x64. SAM instalou Amazon.Lambda.Tools 7.0.0. Execução fora do sandbox necessária para seus metadados locais.
+- `sam build --template-file template.yaml`: sucesso; pacote .NET 8/linux-x64 preparado em `.aws-sam/build/NotificationsFunction` e template em `.aws-sam/build/template.yaml`. SAM instalou Amazon.Lambda.Tools 7.0.0. Execução fora do sandbox necessária para seus metadados locais.
 - SQS: duas filas, visibility 180s, retenção 4 dias, resposta parcial, concorrência 2 por trigger. Lambda 256 MB/30s; DynamoDB on-demand; logs 7 dias.
 - Garantia do simulador: o efeito é o registro durável atômico no DynamoDB, não e-mail externo. Logs são projeção de diagnóstico. Retry de resposta perdida não duplica o registro; itens incompletos/conflitantes não são reconhecidos. Limitações descritas no README.
 - Política de deploy pronta em `tech-challenge-3-notifications-function/iam/deploy-policy.template.json`; versão preenchida em `iam/deploy-policy.local.json`, ignorada pelo Git. Gerador validado; política ainda não anexada nem validada em deploy real.
