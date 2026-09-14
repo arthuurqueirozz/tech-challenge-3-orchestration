@@ -1,6 +1,6 @@
 # Matriz de requisitos - Fase 3
 
-Referência: TC NETT - Fase 3.pdf, oito páginas, texto conferido em 2026-09-13. IDs internos do plano. Nenhum requisito de implementação validado nesta execução.
+Referência: TC NETT - Fase 3.pdf, oito páginas; páginas 4 a 6 reconferidas no gate cloud de 2026-09-14. IDs internos do plano. Status Validado exige evidência descrita na linha; integração final e entregáveis permanecem pendentes.
 
 | ID | Página | Requisito e evidência mínima | Status | Caminho/commit | Comando ou demonstração | Resultado | Data |
 |---|---|---|---|---|---|---|---|---|
@@ -9,10 +9,10 @@ Referência: TC NETT - Fase 3.pdf, oito páginas, texto conferido em 2026-09-13.
 | GW-003 | 3 | JWT validado: válido aceito; ausente, expirado e assinatura inválida rejeitados em rotas protegidas. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
 | GW-004 | 3 | Roteamento para UsersAPI/CatalogAPI: testar rotas públicas e protegidas de ambos. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
 | GW-005 | 5 | Rotas/políticas versionadas na orquestração e aplicáveis de forma reproduzível. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
-| SRV-001 | 4 | NotificationsAPI refatorada para função real, sem host web contínuo antigo. | Em andamento | Função f1f9c32; orquestração README | 18 testes locais; sam validate --lint; sam build | Local validado; deploy e stack integrada pendentes | 2026-09-14 |
-| SRV-002 | 4 | Trigger direto por fila/tópico: ambos os eventos provocam invocação real. | Em andamento | Função f1f9c32; orquestração README | 18 testes locais; sam validate --lint; sam build | Local validado; deploy e stack integrada pendentes | 2026-09-14 |
+| SRV-001 | 4 | NotificationsAPI refatorada para função real, sem host web contínuo antigo. | Validado | Notifications Function; docs/EVIDENCIAS-CLOUD.md | SAM deploy; scripts/cloud-smoke.ps1 -TestDependencyFailure | 18 verificações cloud passaram; triggers reais, duplicidade e recuperação | 2026-09-14 |
+| SRV-002 | 4 | Trigger direto por fila/tópico: ambos os eventos provocam invocação real. | Validado | Notifications Function; docs/EVIDENCIAS-CLOUD.md | SAM deploy; scripts/cloud-smoke.ps1 -TestDependencyFailure | 18 verificações cloud passaram; triggers reais, duplicidade e recuperação | 2026-09-14 |
 | SRV-003 | 4 | Container antigo substituído: nenhum Deployment/serviço/container de NotificationsAPI na stack final. | Em andamento | Função f1f9c32; orquestração README | 18 testes locais; sam validate --lint; sam build | Local validado; deploy e stack integrada pendentes | 2026-09-14 |
-| SRV-004 | 5 | Código e IaC da função em repositório próprio, com testes e README de deploy. | Em andamento | Função f1f9c32; orquestração README | 18 testes locais; sam validate --lint; sam build | Local validado; deploy e stack integrada pendentes | 2026-09-14 |
+| SRV-004 | 5 | Código e IaC da função em repositório próprio, com testes e README de deploy. | Validado | Notifications Function; docs/EVIDENCIAS-CLOUD.md | SAM deploy; scripts/cloud-smoke.ps1 -TestDependencyFailure | 18 verificações cloud passaram; triggers reais, duplicidade e recuperação | 2026-09-14 |
 | SRV-005 | 6 | Link público real do novo repositório da função na documentação e entrega. | Em andamento | Função f1f9c32; orquestração README | 18 testes locais; sam validate --lint; sam build | Local validado; deploy e stack integrada pendentes | 2026-09-14 |
 | SRV-006 | 6 | Vídeo mostra função acionada e logs correlacionáveis em plataforma centralizada. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
 | OBS-001 | 4-5 | Uma opção completa de observabilidade escolhida e justificada no README central. | Em andamento | Função f1f9c32; orquestração README | 18 testes locais; sam validate --lint; sam build | Local validado; deploy e stack integrada pendentes | 2026-09-14 |
@@ -31,9 +31,9 @@ Referência: TC NETT - Fase 3.pdf, oito páginas, texto conferido em 2026-09-13.
 | OBSB-004 | 4 | Somente Opção B: trace distribuído da compra. Não aplicável. | Não aplicável: Opção A escolhida | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
 | OBSB-005 | 5 | Somente Opção B: chaves APM via Kubernetes Secrets. Não aplicável. | Não aplicável: Opção A escolhida | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
 | OBSB-006 | 6 | Somente Opção B: vídeo do dashboard e trace na plataforma. Não aplicável. | Não aplicável: Opção A escolhida | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
-| DATA-001 | 5-6 | MongoDB ou DynamoDB real integrado; neste plano, DynamoDB. | Em andamento | Função f1f9c32; orquestração README | 18 testes locais; sam validate --lint; sam build | Local validado; deploy e stack integrada pendentes | 2026-09-14 |
-| DATA-002 | 5 | Caso NoSQL de dados flexíveis/alta volumetria documentado e demonstrado por logs de eventos reais. | Em andamento | Função f1f9c32; orquestração README | 18 testes locais; sam validate --lint; sam build | Local validado; deploy e stack integrada pendentes | 2026-09-14 |
-| DATA-003 | 5 | Driver oficial .NET: `AWSSDK.DynamoDBv2` referenciado e utilizado. | Em andamento | Função f1f9c32; orquestração README | 18 testes locais; sam validate --lint; sam build | Local validado; deploy e stack integrada pendentes | 2026-09-14 |
+| DATA-001 | 5-6 | MongoDB ou DynamoDB real integrado; neste plano, DynamoDB. | Validado | Notifications Function; docs/EVIDENCIAS-CLOUD.md | SAM deploy; scripts/cloud-smoke.ps1 -TestDependencyFailure | 18 verificações cloud passaram; triggers reais, duplicidade e recuperação | 2026-09-14 |
+| DATA-002 | 5 | Caso NoSQL de dados flexíveis/alta volumetria documentado e demonstrado por logs de eventos reais. | Validado | Notifications Function; docs/EVIDENCIAS-CLOUD.md | SAM deploy; scripts/cloud-smoke.ps1 -TestDependencyFailure | 18 verificações cloud passaram; triggers reais, duplicidade e recuperação | 2026-09-14 |
+| DATA-003 | 5 | Driver oficial .NET: `AWSSDK.DynamoDBv2` referenciado e utilizado. | Validado | Notifications Function; docs/EVIDENCIAS-CLOUD.md | SAM deploy; scripts/cloud-smoke.ps1 -TestDependencyFailure | 18 verificações cloud passaram; triggers reais, duplicidade e recuperação | 2026-09-14 |
 | DATA-004 | 5-6 | Cache distribuído externo integrado a consulta real; neste plano, Redis. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
 | DATA-005 | 5 | Cache temporário reduz acesso ao banco: miss, hit, expiração e invalidação comprovados. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |
 | DATA-006 | 5 | `StackExchange.Redis` ou `IDistributedCache` efetivamente utilizado. | Não iniciado | Pendente | Pendente | Sem evidência de execução | 2026-09-13 |

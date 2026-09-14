@@ -52,15 +52,15 @@ O SAM mantém os gatilhos pausados por padrão; habilitar nos testes e pausar ao
 O login IAM via chave foi configurado pelo responsável após falha de OAuth.
 O perfil do host não é automaticamente disponibilizado aos containers:
 a etapa integrada deve renderizar Secrets locais, ignorados pelo Git.
-A Lambda utilizará uma execution role.
+A Lambda utiliza sua execution role; Docker Linux já foi iniciado e verificado.
 
 ## Estado e próximos gates
 
 Etapa 1: baselines da Fase 2 passaram em 53 testes; branches e tags preservadas.
-Etapa 2: função e SAM preparados; 18 testes locais passaram, lint e build SAM
-concluídos. Deploy depende de anexar a política IAM preparada; estimativa de custos documentada.
-O modelo atômico de simulação no DynamoDB antecipa a dependência da Etapa 3,
-cujos testes no store real permanecem pendentes. Não há evidência cloud ainda.
+Etapas 2 e 3: stack AWS criada; 18 testes locais, lint e build SAM passaram.
+Smoke real passou em 18 verificações, incluindo os dois eventos por SQS,
+duplicidade, lote parcial e recuperação automática após falha de dependência.
+Resultados e limites em [EVIDENCIAS-CLOUD.md](docs/EVIDENCIAS-CLOUD.md).
 Etapas 4 a 8 ainda precisam adaptar produtores, cache, métricas, gateway,
 manifests integrados e smoke test. Vídeo e relatório permanecem pendentes.
 

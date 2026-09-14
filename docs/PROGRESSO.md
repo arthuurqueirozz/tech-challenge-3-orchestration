@@ -4,7 +4,7 @@ Atualizado em 2026-09-14.
 
 ## Etapa atual
 
-Etapa 0 concluída: PDF e escopo conferidos, ambiente identificado, conta/região/responsável/teto/destino definidos e identidade IAM validada. Etapa 1 concluída: três tags/branches de evolução e dois novos repositórios independentes, todos publicados nos destinos do usuário. Etapa 2 implementada localmente, com modelo de simulação atômica DynamoDB antecipando a dependência da Etapa 3. O gate cloud das Etapas 2/3 está pendente de permissões. Estimativa de custos preparada sem créditos ou descontos gratuitos. Nenhum recurso AWS de aplicação foi criado.
+Etapas 0 a 3 concluídas em seus gates técnicos. Stack SAM criada em us-east-1 com a política FCGFase3Deploy anexada pelo responsável. Ambos os eventos acionaram a Lambda real, com logs no CloudWatch e simulações duráveis no DynamoDB. Smoke cloud final passou em 18 verificações, incluindo duplicidade, lote parcial e recuperação automática após erro real de acesso ao DynamoDB. Evidências em `tech-challenge-3-orchestration/docs/EVIDENCIAS-CLOUD.md`. Estimativa de custos preparada sem créditos ou descontos gratuitos. Próxima etapa: 4, adaptação dos produtores; ainda não implementada.
 
 ## Implementação e evidências atuais
 
@@ -17,7 +17,10 @@ Etapa 0 concluída: PDF e escopo conferidos, ambiente identificado, conta/regiã
 - Controle de custo: parâmetro SAM `NotificationsEnabled=false` por padrão; habilitar explicitamente nos testes cloud e desabilitar ao encerrar. Lint e build SAM passaram novamente após a alteração. Gatilhos pausados não interrompem retenção de mensagens nem cobrança de armazenamento.
 - Sem créditos promocionais, conforme informado pelo responsável em 2026-09-14. Estimativa sem benefícios gratuitos: USD 0,20344 para até 20 horas mensais de gatilhos ativos e 1.000 invocações, sob as demais hipóteses de `tech-challenge-3-orchestration/docs/CUSTOS.md`. Reserva operacional de USD 0,30; não representa garantia de teto. Validar uso real na primeira sessão.
 - Garantia do simulador: o efeito é o registro durável atômico no DynamoDB, não e-mail externo. Logs são projeção de diagnóstico. Retry de resposta perdida não duplica o registro; itens incompletos/conflitantes não são reconhecidos. Limitações descritas no README.
-- Política de deploy pronta em `tech-challenge-3-notifications-function/iam/deploy-policy.template.json`; versão preenchida em `iam/deploy-policy.local.json`, ignorada pelo Git. Gerador validado; política ainda não anexada nem validada em deploy real.
+- Política de deploy em `tech-challenge-3-notifications-function/iam/deploy-policy.template.json`; versão preenchida em `iam/deploy-policy.local.json`, ignorada pelo Git. Anexação confirmada em 2026-09-14 e criação da stack validada sem ampliar a política. Quota Lambda da conta: 10 execuções simultâneas.
+- Bucket de artefatos privado, com os quatro bloqueios de acesso público ativos e criptografia AES256. Stack com oito recursos previstos, sem rede/servidores gerenciados adicionais. Criação e atualização dos mappings via changesets revisados; somente os dois mappings mudaram ao ativar os testes.
+- Docker Desktop iniciado; motor Linux 29.6.1 funcionando, 20 CPUs e aproximadamente 16 GB disponíveis, sem containers em execução na conferência.
+- Encerramento cloud: stack UPDATE_COMPLETE, NotificationsEnabled=false, ambos os mappings Disabled; Lambda Active/Successful com tabela original. Role contém somente a política de runtime, sem política temporária. Filas drenadas no smoke; 807.034 bytes de artefatos S3. Recursos e dados preservados; fatura real ainda não apurada.
 - Orquestração: README inicial com arquitetura/Opção A, links de destino, pré-requisitos e placeholders em `.env.example`. Manifests finais ainda não implementados.
 - Varredura inicial dos novos fontes não encontrou padrões de access keys ou chaves privadas. `git diff --cached --check` aplicado antes dos commits.
 
@@ -38,7 +41,7 @@ Pasta: `C:\Users\Arthur\Desktop\fiap\TechChallenge3`. Windows build 26200, x64, 
 |---|---|
 | Git | 2.47.1.windows.2 |
 | .NET SDK | 8.0.425 disponível; também instalados 7.0.410 e 9.0.305 |
-| Docker | Cliente 29.6.1; motor Linux indisponível, pipe dockerDesktopLinuxEngine ausente |
+| Docker | Motor Linux 29.6.1 validado após iniciar Docker Desktop; 20 CPUs e aproximadamente 16 GB disponíveis |
 | kubectl | v1.36.1 |
 | Kind | v0.33.0 instalado pelo WinGet, hash verificado pelo instalador |
 | AWS CLI | v2.36.44 instalado por MSI oficial com assinatura válida, por usuário |
@@ -62,7 +65,7 @@ Baseline compilada e testes executados em Release com `dotnet run --project test
 
 ## Pendências
 
-Autenticação resolvida: STS confirmou `fiap-fase3-cli` em `us-east-1` após o usuário configurar a chave IAM local. As consultas ListAttachedUserPolicies, ListUserPolicies e GetFreeTierUsage continuam negadas por ausência de permissão na verificação de 2026-09-14. Antes do deploy, o responsável deve revisar e anexar a política gerenciada `FCGFase3Deploy` conforme `iam/README.md`. Ausência de créditos confirmada; a estimativa não depende de benefícios gratuitos da conta. Histórico da falha OAuth mantido abaixo apenas para explicar a adaptação.
+Autenticação e permissões de deploy resolvidas: STS confirmou `fiap-fase3-cli`; ListAttachedUserPolicies confirmou FCGFase3Deploy e ListUserPolicies retornou lista vazia. GetFreeTierUsage funcionou, inicialmente com registros de uso Glue/KMS; não permite concluir gratuidade de todos os serviços do projeto. Ausência de créditos confirmada; a estimativa não depende de benefícios gratuitos. Histórico da falha OAuth mantido abaixo apenas para explicar a adaptação.
 
 Usuário confirmou autenticação no navegador como root. A documentação atual permite root no `aws login` sem política adicional `SignInLocalDevelopmentAccess`; portanto, não atribuir `TOKEN_EXPIRED` à ausência dessa política ou ao tipo de usuário. Tentativa `--remote` também falhou com `TOKEN_EXPIRED`, conforme saída enviada pelo usuário. Nenhum código de autorização foi reutilizado ou registrado neste arquivo.
 
@@ -72,11 +75,11 @@ Conta confirmada pelo usuário: conta própria, sob sua responsabilidade. Qualqu
 
 1. Aplicar os limites de sessões e volume de `docs/CUSTOS.md` da orquestração; conferir uso real após o primeiro ensaio frente ao teto de USD 1/mês. Não presumir gratuidade; ausência de créditos já confirmada.
 2. Perfil `fiap-fase3` validado com STS; preservar credenciais somente no mecanismo local e preparar posteriormente credenciais de execução dos produtores com SendMessage. Não injetar a política de deploy nos containers.
-3. Anexar/revalidar a política para CloudFormation, S3 de artefatos, Lambda, SQS, DynamoDB, CloudWatch e criação/passagem da role IAM. Identidade válida não comprova essas permissões.
-4. Verificar as permissões IAM reais da conta própria e a role de execução da função antes de finalizar o SAM.
+3. Política de deploy validada na criação real; remover recursos e outros caminhos ainda exigem validação quando executados.
+4. Preparar acesso de execução dos produtores restrito às filas, sem injetar a identidade de deploy nos containers.
 5. Destino GitHub autorizado: usuário pessoal `arthuurqueirozz`, confirmado pela API autenticada; autorização do grupo para republicação confirmada pelo usuário. Não foi inventada licença para código do grupo.
-6. Iniciar Docker Linux; conferir recursos locais e portas antes da stack integrada. Kind/jq já instalados.
-7. Executar os gates cloud das Etapas 2/3 e somente então avançar as etapas dependentes; manter vídeo/relatório e demais entregáveis pendentes.
+6. Docker Linux iniciado e recursos conferidos; verificar portas ao preparar a stack integrada. Kind/jq já instalados.
+7. Gates cloud das Etapas 2/3 concluídos; avançar para produtores e etapas dependentes. Manter integração final, vídeo/relatório e demais entregáveis pendentes.
 
 Os pré-requisitos não exigem criar manualmente filas, tabela ou função: esses recursos serão declarados no SAM na etapa prevista. S3 é suporte ao upload dos artefatos de deploy, não um novo componente de negócio.
 

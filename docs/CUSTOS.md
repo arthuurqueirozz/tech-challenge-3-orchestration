@@ -55,9 +55,11 @@ Se permitido pela conta, configurar AWS Budgets no console para USD 1/mês e
 alertas antecipados. Alertas não bloqueiam gastos nem chegam necessariamente
 imediatamente. Nenhum orçamento ou alerta foi criado por este agente.
 
-O primeiro deploy permanece pendente de anexação da política IAM preparada.
+O primeiro deploy foi concluído em 2026-09-14 após anexação da política IAM.
 Benefícios Free Tier são distintos de créditos promocionais: podem reduzir o
-valor real, mas não foram usados neste cálculo nem verificados nesta conta.
+valor real, mas não foram usados neste cálculo. A consulta GetFreeTierUsage
+funcionou; o retorno inicial continha apenas uso de Glue e KMS e não comprova
+a franquia disponível para todos os serviços deste projeto.
 
 ## Fontes oficiais consultadas
 
