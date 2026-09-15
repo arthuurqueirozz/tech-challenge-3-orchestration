@@ -81,8 +81,15 @@ incluindo oito erros 500 reais e recuperação. Consultas dos seis painéis
 validadas via Grafana; inspeção visual no navegador ainda pendente.
 [Executar e acessar o dashboard](docs/ETAPA-6.md) e
 [consultar evidências](docs/EVIDENCIAS-ETAPA-6.md).
-Etapas 7 e 8 ainda precisam entregar gateway e integração final de todos os
-componentes. Vídeo e relatório permanecem pendentes.
+Etapa 7 concluída no gate técnico: Kong OSS 3.9.3 no Kind, configuração
+declarativa e JWT com segredo local. 71 verificações passaram; 52 chamadas HTTP
+somente pelo gateway, com validação de tokens e permissões Admin/User.
+Recuperação do ambiente após reinício do computador também executada.
+[Implantar, recuperar e acessar o Kong](docs/ETAPA-7.md) e
+[consultar evidências](docs/EVIDENCIAS-ETAPA-7.md).
+Etapa 8 ainda precisa consolidar todos os componentes e validar cadastro,
+compra e notificações pelo gateway, com deploy completo do zero.
+Vídeo e relatório permanecem pendentes.
 
 O README central receberá os comandos validados de build/carga no Kind,
 deploy integrado, inicialização, acesso via Kong, dashboard, diagnóstico e

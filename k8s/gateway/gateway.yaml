@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kong
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kong
+  template:
+    metadata:
+      labels:
+        app: kong
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: kong
+          image: kong:3.9.3
+          ports:
+            - name: proxy
+              containerPort: 8000
+            - name: status
+              containerPort: 8100
+          env:
+            - name: KONG_DATABASE
+              value: "off"
+            - name: KONG_DECLARATIVE_CONFIG
+              value: /etc/kong/declarative/kong.json
+            - name: KONG_PROXY_LISTEN
+              value: "0.0.0.0:8000"
+            - name: KONG_ADMIN_LISTEN
+              value: "off"
+            - name: KONG_STATUS_LISTEN
+              value: "0.0.0.0:8100"
+            - name: KONG_NGINX_WORKER_PROCESSES
+              value: "2"
+            - name: KONG_PLUGINS
+              value: jwt
+            - name: KONG_PROXY_ACCESS_LOG
+              value: "off"
+            - name: KONG_PROXY_ERROR_LOG
+              value: /dev/stderr
+          volumeMounts:
+            - name: declarative
+              mountPath: /etc/kong/declarative
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /status/ready
+              port: status
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /status
+              port: status
+            initialDelaySeconds: 20
+          startupProbe:
+            httpGet:
+              path: /status
+              port: status
+            failureThreshold: 60
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+      volumes:
+        - name: declarative
+          secret:
+            secretName: kong-declarative
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kong
+spec:
+  type: ClusterIP
+  selector:
+    app: kong
+  ports:
+    - name: proxy
+      port: 8000
+      targetPort: proxy

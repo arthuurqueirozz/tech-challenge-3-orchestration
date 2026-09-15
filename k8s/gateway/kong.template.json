@@ -1,0 +1,197 @@
+{
+  "_format_version": "3.0",
+  "_transform": true,
+  "consumers": [
+    {
+      "username": "fcg-users-issuer",
+      "jwt_secrets": [
+        {
+          "key": "FCG",
+          "algorithm": "HS256",
+          "secret": "__JWT_SECRET_FROM_LOCAL_SETTINGS__"
+        }
+      ]
+    }
+  ],
+  "services": [
+    {
+      "name": "users-api",
+      "url": "http://users-api:8080",
+      "routes": [
+        {
+          "name": "auth-public",
+          "methods": [
+            "POST"
+          ],
+          "paths": [
+            "~/api/auth/(register|login)/?$"
+          ],
+          "strip_path": false
+        },
+        {
+          "name": "profile-protected",
+          "methods": [
+            "GET"
+          ],
+          "paths": [
+            "~/api/me/profile/?$"
+          ],
+          "strip_path": false,
+          "plugins": [
+            {
+              "name": "jwt",
+              "config": {
+                "key_claim_name": "iss",
+                "claims_to_verify": [
+                  "exp",
+                  "nbf"
+                ],
+                "secret_is_base64": false,
+                "uri_param_names": [],
+                "cookie_names": [],
+                "header_names": [
+                  "authorization"
+                ],
+                "run_on_preflight": true
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "catalog-api",
+      "url": "http://catalog-api:8080",
+      "routes": [
+        {
+          "name": "games-public",
+          "methods": [
+            "GET"
+          ],
+          "paths": [
+            "~/api/games/?$",
+            "~/api/games/[^/]+/?$"
+          ],
+          "strip_path": false
+        },
+        {
+          "name": "games-create",
+          "methods": [
+            "POST"
+          ],
+          "paths": [
+            "~/api/games/?$"
+          ],
+          "strip_path": false,
+          "plugins": [
+            {
+              "name": "jwt",
+              "config": {
+                "key_claim_name": "iss",
+                "claims_to_verify": [
+                  "exp",
+                  "nbf"
+                ],
+                "secret_is_base64": false,
+                "uri_param_names": [],
+                "cookie_names": [],
+                "header_names": [
+                  "authorization"
+                ],
+                "run_on_preflight": true
+              }
+            }
+          ]
+        },
+        {
+          "name": "games-admin-edit",
+          "methods": [
+            "PUT",
+            "DELETE"
+          ],
+          "paths": [
+            "~/api/games/[^/]+/?$"
+          ],
+          "strip_path": false,
+          "plugins": [
+            {
+              "name": "jwt",
+              "config": {
+                "key_claim_name": "iss",
+                "claims_to_verify": [
+                  "exp",
+                  "nbf"
+                ],
+                "secret_is_base64": false,
+                "uri_param_names": [],
+                "cookie_names": [],
+                "header_names": [
+                  "authorization"
+                ],
+                "run_on_preflight": true
+              }
+            }
+          ]
+        },
+        {
+          "name": "library-protected",
+          "methods": [
+            "GET"
+          ],
+          "paths": [
+            "~/api/me/library/games/?$"
+          ],
+          "strip_path": false,
+          "plugins": [
+            {
+              "name": "jwt",
+              "config": {
+                "key_claim_name": "iss",
+                "claims_to_verify": [
+                  "exp",
+                  "nbf"
+                ],
+                "secret_is_base64": false,
+                "uri_param_names": [],
+                "cookie_names": [],
+                "header_names": [
+                  "authorization"
+                ],
+                "run_on_preflight": true
+              }
+            }
+          ]
+        },
+        {
+          "name": "purchase-protected",
+          "methods": [
+            "POST"
+          ],
+          "paths": [
+            "~/api/me/library/games/[^/]+/?$"
+          ],
+          "strip_path": false,
+          "plugins": [
+            {
+              "name": "jwt",
+              "config": {
+                "key_claim_name": "iss",
+                "claims_to_verify": [
+                  "exp",
+                  "nbf"
+                ],
+                "secret_is_base64": false,
+                "uri_param_names": [],
+                "cookie_names": [],
+                "header_names": [
+                  "authorization"
+                ],
+                "run_on_preflight": true
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

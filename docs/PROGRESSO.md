@@ -4,7 +4,17 @@ Atualizado em 2026-09-14.
 
 ## Etapa atual
 
-Etapas 0 a 6 concluídas em seus gates técnicos. Prometheus/Grafana implantados no Kind com dashboard provisionado por Git; métricas das duas APIs e consultas dos seis painéis validadas com tráfego real. Evidências em `tech-challenge-3-orchestration/docs/EVIDENCIAS-ETAPA-6.md`. Próxima etapa: 7, gateway Kong. Integração final, inspeção visual do dashboard, vídeo e relatório ainda pendentes.
+Etapas 0 a 7 concluídas em seus gates técnicos. Kong implantado no Kind com rotas e JWT declarativos; 71 verificações passaram, com todas as 52 chamadas HTTP do smoke pelo gateway. Evidências em `tech-challenge-3-orchestration/docs/EVIDENCIAS-ETAPA-7.md`. Próxima etapa: 8, orquestração e teste integrado. Inspeção visual do dashboard, vídeo e relatório ainda pendentes.
+
+## Etapa 7 — estado atual
+
+- Kong OSS 3.9.3 em modo DB-less, manifests em k8s/gateway e overlay k8s/stage7 na orquestração. Reutiliza cluster/namespace da etapa 6. Configuração versionada contém services/routes/plugins e placeholder; chave JWT renderizada em Secret local ignorado pelo Git.
+- Oito deployments disponíveis após recuperação do reinício real do computador. Docker Desktop iniciado, cluster e SQL/PVC preservados. APIs ClusterIP; somente Kong recebe port-forward de negócio em 127.0.0.1:18000. API Admin desligada; status/metrics/health/Swagger não roteados.
+- Smoke final em 2026-09-14 23:29 BRT: 71 verificações, 52 chamadas HTTP. JWT válido, ausente, expirado, adulterado, nbf futuro, claims exp/nbf ausentes, issuer e audience inválidos/ausentes. Kong rejeita tokens inválidos; APIs rejeitam audience e mantêm permissões Admin.
+- Logins reais Admin/User, perfil e biblioteca, rotas públicas, CRUD Admin e 403 para User validados. User temporário criado por SQL e removido; cadastro inválido retorna 400. Compra inexistente retorna 400 sem evento. Cadastro/compra completos e notificações no Kind pertencem à etapa 8.
+- Nenhuma alteração nas APIs ou na AWS. Formato das rotas ajustado após erro do parser Kong; serialização de evidências corrigida para Windows PowerShell. Execução final concluiu com código zero.
+- Guia de recuperação, deploy, diagnóstico e encerramento: `tech-challenge-3-orchestration/docs/ETAPA-7.md`. GW-001/GW-002 exigem reconferência na stack final; entrega acadêmica permanece pendente.
+- Ensaio encerrado: port-forward do Kong parado e nó Kind em estado exited; cluster e SQL/PVC preservados.
 
 ## Etapa 6 — estado atual
 
@@ -113,7 +123,7 @@ Conta confirmada pelo usuário: conta própria, sob sua responsabilidade. Qualqu
 4. Adaptar o preparo das credenciais temporárias para Secrets locais do Kind na etapa integrada; manter arquivos fora do Git.
 5. Destino GitHub autorizado: usuário pessoal `arthuurqueirozz`, confirmado pela API autenticada; autorização do grupo para republicação confirmada pelo usuário. Não foi inventada licença para código do grupo.
 6. Docker Linux iniciado e recursos conferidos; verificar portas ao preparar a stack integrada. Kind/jq já instalados.
-7. Gates cloud, produtores, Redis e métricas (Etapas 2 a 6) concluídos; avançar para Kong (Etapa 7). Manter integração final, inspeção visual do dashboard, vídeo/relatório e demais entregáveis pendentes.
+7. Gates cloud, produtores, Redis, métricas e Kong (Etapas 2 a 7) concluídos; avançar para orquestração e teste integrado (Etapa 8). Manter inspeção visual do dashboard, vídeo/relatório e demais entregáveis pendentes.
 
 Os pré-requisitos não exigem criar manualmente filas, tabela ou função: esses recursos serão declarados no SAM na etapa prevista. S3 é suporte ao upload dos artefatos de deploy, não um novo componente de negócio.
 
