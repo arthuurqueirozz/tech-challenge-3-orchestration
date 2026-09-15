@@ -4,9 +4,21 @@ Atualizado em 2026-09-14.
 
 ## Etapa atual
 
-Etapas 0 a 5 concluídas em seus gates técnicos. Redis validado nas consultas públicas do CatalogAPI: hit evita SELECT, TTL e invalidação funcionam, falhas preservam SQL e disponibilidade. Evidências em `tech-challenge-3-orchestration/docs/EVIDENCIAS-ETAPA-5.md`. Produtores/cloud das etapas anteriores continuam documentados em EVIDENCIAS-ETAPA-4.md e EVIDENCIAS-CLOUD.md. Próxima etapa: 6, métricas e dashboard Prometheus/Grafana. Kind/Kong, métricas, integração final, vídeo e relatório ainda pendentes.
+Etapas 0 a 6 concluídas em seus gates técnicos. Prometheus/Grafana implantados no Kind com dashboard provisionado por Git; métricas das duas APIs e consultas dos seis painéis validadas com tráfego real. Evidências em `tech-challenge-3-orchestration/docs/EVIDENCIAS-ETAPA-6.md`. Próxima etapa: 7, gateway Kong. Integração final, inspeção visual do dashboard, vídeo e relatório ainda pendentes.
 
-## Etapa 5 — estado atual
+## Etapa 6 — estado atual
+
+- UsersAPI e CatalogAPI expõem /metrics com prometheus-net.AspNetCore 8.2.1. Counter de requisições e histograma de duração somente em /api. Labels route/method/status_code parametrizados; sem IDs, tokens ou query strings. Exceções tratadas registram o status final.
+- 29 testes UsersAPI e 30 CatalogAPI passaram (59). Builds Docker e promtool check config passaram.
+- Kind fcg-fase3-stage6 criado com kubeconfig isolado. Kubernetes v1.37.0; Prometheus 3.14.0 e Grafana OSS 13.2.1 em manifests versionados. Sete deployments ficaram Ready. Grafana exigiu elevar o limite de armazenamento temporário de 256 MiB a 2 GiB para evitar eviction.
+- Datasource/provider/dashboard provisionados por ConfigMaps Kustomize, sem criação manual. Seis painéis: totais, contagem por status, p95 por rota, req/s, erros 5xx e 4xx. Scrape/refresh 5 s, janela de taxas/p95 2 min.
+- Smoke passou em 33 verificações: 94 requisições (53 Users e 41 Catalog) conferidas exatamente por status. Oito erros 500 por falha SQL real, com tabelas restauradas e APIs recuperadas. Consultas dos seis painéis executadas pelo proxy Grafana→Prometheus retornaram dados finitos.
+- Inspeção visual/screenshot não realizada: ferramenta informou ausência de navegador conectado. Dados, queries e provisionamento validados; demonstração visual no vídeo permanece pendente.
+- Ensaio usa login admin sem gerar eventos/outbox, não requer AWS real. Valores fictícios do SDK estão explícitos no overlay isolado; não representam teste de notificações. Sem alterações AWS.
+- Guia de deploy, acesso e encerramento em `tech-challenge-3-orchestration/docs/ETAPA-6.md`. Cluster e SQL/PVC preservados; integração final com Kong/Payments/SQS pertence às próximas etapas.
+- Commits: UsersAPI `8aa318d`, CatalogAPI `7b35ee3`; branches fase-3 e tags da baseline preservadas. Port-forwards encerrados e nó Kind em estado exited na conferência final.
+
+## Etapa 5 — gate anterior
 
 - CatalogAPI usa IDistributedCache com Microsoft.Extensions.Caching.StackExchangeRedis 8.0.28, configuração tipada e decorador do serviço SQL existente. Cache somente em lista/detalhe público; compras e biblioteca continuam consultando SQL.
 - Chaves v1 para lista ativa ordenada por título e detalhe por GUID. TTL absoluto 60 s por padrão, sem renovação em hit; invalidação de lista/detalhe após commit de create/update/delete. Falhas Redis têm fallback; entradas antigas podem persistir até TTL em falha de invalidação/concorrência.
@@ -101,7 +113,7 @@ Conta confirmada pelo usuário: conta própria, sob sua responsabilidade. Qualqu
 4. Adaptar o preparo das credenciais temporárias para Secrets locais do Kind na etapa integrada; manter arquivos fora do Git.
 5. Destino GitHub autorizado: usuário pessoal `arthuurqueirozz`, confirmado pela API autenticada; autorização do grupo para republicação confirmada pelo usuário. Não foi inventada licença para código do grupo.
 6. Docker Linux iniciado e recursos conferidos; verificar portas ao preparar a stack integrada. Kind/jq já instalados.
-7. Gates cloud, produtores e Redis (Etapas 2 a 5) concluídos; avançar para métricas/dashboard (Etapa 6). Manter integração final, vídeo/relatório e demais entregáveis pendentes.
+7. Gates cloud, produtores, Redis e métricas (Etapas 2 a 6) concluídos; avançar para Kong (Etapa 7). Manter integração final, inspeção visual do dashboard, vídeo/relatório e demais entregáveis pendentes.
 
 Os pré-requisitos não exigem criar manualmente filas, tabela ou função: esses recursos serão declarados no SAM na etapa prevista. S3 é suporte ao upload dos artefatos de deploy, não um novo componente de negócio.
 

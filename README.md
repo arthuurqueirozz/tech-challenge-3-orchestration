@@ -74,8 +74,15 @@ Hits de lista/detalhe reduziram SELECTs de 1 para 0. Startup sem Redis e
 reconexão também validados, sem mudanças AWS.
 [Executar o ensaio de cache](docs/ETAPA-5.md) e
 [consultar evidências](docs/EVIDENCIAS-ETAPA-5.md).
-Etapas 6 a 8 ainda precisam entregar métricas, gateway, manifests integrados e
-smoke test final. Vídeo e relatório permanecem pendentes.
+Etapa 6 concluída no gate técnico: métricas nas duas APIs, Prometheus/Grafana no
+Kind, datasource e dashboard provisionados por Git. 59 testes locais e 33
+verificações integradas passaram; 94 requisições conferidas por serviço/status,
+incluindo oito erros 500 reais e recuperação. Consultas dos seis painéis
+validadas via Grafana; inspeção visual no navegador ainda pendente.
+[Executar e acessar o dashboard](docs/ETAPA-6.md) e
+[consultar evidências](docs/EVIDENCIAS-ETAPA-6.md).
+Etapas 7 e 8 ainda precisam entregar gateway e integração final de todos os
+componentes. Vídeo e relatório permanecem pendentes.
 
 O README central receberá os comandos validados de build/carga no Kind,
 deploy integrado, inicialização, acesso via Kong, dashboard, diagnóstico e

@@ -1,0 +1,288 @@
+{
+  "apiVersion": "apps/v1",
+  "kind": "Deployment",
+  "metadata": {
+    "name": "prometheus"
+  },
+  "spec": {
+    "replicas": 1,
+    "selector": {
+      "matchLabels": {
+        "app": "prometheus"
+      }
+    },
+    "strategy": {
+      "type": "Recreate"
+    },
+    "template": {
+      "metadata": {
+        "labels": {
+          "app": "prometheus"
+        }
+      },
+      "spec": {
+        "securityContext": { "fsGroup": 65534 },
+        "containers": [
+          {
+            "name": "prometheus",
+            "image": "prom/prometheus:v3.14.0",
+            "imagePullPolicy": "IfNotPresent",
+            "ports": [
+              {
+                "containerPort": 9090
+              }
+            ],
+            "resources": {
+              "requests": {
+                "cpu": "100m",
+                "memory": "128Mi"
+              },
+              "limits": {
+                "cpu": "2",
+                "memory": "512Mi"
+              }
+            },
+            "args": [
+              "--config.file=/etc/prometheus/prometheus.yml",
+              "--storage.tsdb.path=/prometheus",
+              "--storage.tsdb.retention.time=24h",
+              "--storage.tsdb.retention.size=256MB"
+            ],
+            "volumeMounts": [
+              {
+                "name": "config",
+                "mountPath": "/etc/prometheus"
+              },
+              {
+                "name": "data",
+                "mountPath": "/prometheus"
+              }
+            ],
+            "readinessProbe": {
+              "tcpSocket": {
+                "port": 9090
+              },
+              "initialDelaySeconds": 10,
+              "periodSeconds": 5
+            },
+            "livenessProbe": {
+              "tcpSocket": {
+                "port": 9090
+              },
+              "initialDelaySeconds": 60,
+              "periodSeconds": 10
+            },
+            "startupProbe": {
+              "tcpSocket": {
+                "port": 9090
+              },
+              "failureThreshold": 60,
+              "periodSeconds": 5
+            }
+          }
+        ],
+        "volumes": [
+          {
+            "name": "config",
+            "configMap": {
+              "name": "prometheus-config"
+            }
+          },
+          {
+            "name": "data",
+            "emptyDir": {
+              "sizeLimit": "512Mi"
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+---
+{
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+    "name": "prometheus"
+  },
+  "spec": {
+    "type": "ClusterIP",
+    "selector": {
+      "app": "prometheus"
+    },
+    "ports": [
+      {
+        "name": "http",
+        "port": 9090,
+        "targetPort": 9090
+      }
+    ]
+  }
+}
+---
+{
+  "apiVersion": "apps/v1",
+  "kind": "Deployment",
+  "metadata": {
+    "name": "grafana"
+  },
+  "spec": {
+    "replicas": 1,
+    "selector": {
+      "matchLabels": {
+        "app": "grafana"
+      }
+    },
+    "strategy": {
+      "type": "Recreate"
+    },
+    "template": {
+      "metadata": {
+        "labels": {
+          "app": "grafana"
+        }
+      },
+      "spec": {
+        "securityContext": { "fsGroup": 472 },
+        "containers": [
+          {
+            "name": "grafana",
+            "image": "grafana/grafana:13.2.1",
+            "imagePullPolicy": "IfNotPresent",
+            "ports": [
+              {
+                "containerPort": 3000
+              }
+            ],
+            "resources": {
+              "requests": {
+                "cpu": "100m",
+                "memory": "256Mi"
+              },
+              "limits": {
+                "cpu": "2",
+                "memory": "1Gi"
+              }
+            },
+            "env": [
+              {
+                "name": "GF_USERS_ALLOW_SIGN_UP",
+                "value": "false"
+              },
+              {
+                "name": "GF_ANALYTICS_REPORTING_ENABLED",
+                "value": "false"
+              },
+              {
+                "name": "GF_ANALYTICS_CHECK_FOR_UPDATES",
+                "value": "false"
+              },
+              {
+                "name": "GF_AUTH_ANONYMOUS_ENABLED",
+                "value": "true"
+              },
+              {
+                "name": "GF_AUTH_ANONYMOUS_ORG_ROLE",
+                "value": "Viewer"
+              }
+            ],
+            "envFrom": [
+              {
+                "secretRef": {
+                  "name": "grafana-secrets"
+                }
+              }
+            ],
+            "volumeMounts": [
+              {
+                "name": "datasources",
+                "mountPath": "/etc/grafana/provisioning/datasources"
+              },
+              {
+                "name": "providers",
+                "mountPath": "/etc/grafana/provisioning/dashboards"
+              },
+              {
+                "name": "dashboard",
+                "mountPath": "/var/lib/grafana/dashboards"
+              },
+              {
+                "name": "data",
+                "mountPath": "/var/lib/grafana"
+              }
+            ],
+            "readinessProbe": {
+              "tcpSocket": {
+                "port": 3000
+              },
+              "initialDelaySeconds": 10,
+              "periodSeconds": 5
+            },
+            "livenessProbe": {
+              "tcpSocket": {
+                "port": 3000
+              },
+              "initialDelaySeconds": 60,
+              "periodSeconds": 10
+            },
+            "startupProbe": {
+              "tcpSocket": {
+                "port": 3000
+              },
+              "failureThreshold": 60,
+              "periodSeconds": 5
+            }
+          }
+        ],
+        "volumes": [
+          {
+            "name": "datasources",
+            "configMap": {
+              "name": "grafana-datasources"
+            }
+          },
+          {
+            "name": "providers",
+            "configMap": {
+              "name": "grafana-providers"
+            }
+          },
+          {
+            "name": "dashboard",
+            "configMap": {
+              "name": "grafana-dashboard"
+            }
+          },
+          {
+            "name": "data",
+            "emptyDir": {
+              "sizeLimit": "2Gi"
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+---
+{
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+    "name": "grafana"
+  },
+  "spec": {
+    "type": "ClusterIP",
+    "selector": {
+      "app": "grafana"
+    },
+    "ports": [
+      {
+        "name": "http",
+        "port": 3000,
+        "targetPort": 3000
+      }
+    ]
+  }
+}

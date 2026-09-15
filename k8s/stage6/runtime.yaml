@@ -1,0 +1,628 @@
+{
+  "apiVersion": "v1",
+  "kind": "PersistentVolumeClaim",
+  "metadata": {
+    "name": "sql-data"
+  },
+  "spec": {
+    "accessModes": [
+      "ReadWriteOnce"
+    ],
+    "resources": {
+      "requests": {
+        "storage": "2Gi"
+      }
+    }
+  }
+}
+---
+{
+  "apiVersion": "apps/v1",
+  "kind": "Deployment",
+  "metadata": {
+    "name": "sqlserver"
+  },
+  "spec": {
+    "replicas": 1,
+    "selector": {
+      "matchLabels": {
+        "app": "sqlserver"
+      }
+    },
+    "strategy": {
+      "type": "Recreate"
+    },
+    "template": {
+      "metadata": {
+        "labels": {
+          "app": "sqlserver"
+        }
+      },
+      "spec": {
+        "securityContext": { "fsGroup": 10001 },
+        "containers": [
+          {
+            "name": "sqlserver",
+            "image": "mcr.microsoft.com/mssql/server:2022-latest",
+            "imagePullPolicy": "IfNotPresent",
+            "ports": [
+              {
+                "containerPort": 1433
+              }
+            ],
+            "resources": {
+              "requests": {
+                "cpu": "500m",
+                "memory": "2Gi"
+              },
+              "limits": {
+                "cpu": "2",
+                "memory": "4Gi"
+              }
+            },
+            "env": [
+              {
+                "name": "ACCEPT_EULA",
+                "value": "Y"
+              },
+              {
+                "name": "MSSQL_PID",
+                "value": "Developer"
+              }
+            ],
+            "envFrom": [
+              {
+                "secretRef": {
+                  "name": "sql-secrets"
+                }
+              }
+            ],
+            "volumeMounts": [
+              {
+                "name": "data",
+                "mountPath": "/var/opt/mssql"
+              }
+            ],
+            "readinessProbe": {
+              "tcpSocket": {
+                "port": 1433
+              },
+              "initialDelaySeconds": 10,
+              "periodSeconds": 5
+            },
+            "livenessProbe": {
+              "tcpSocket": {
+                "port": 1433
+              },
+              "initialDelaySeconds": 60,
+              "periodSeconds": 10
+            },
+            "startupProbe": {
+              "tcpSocket": {
+                "port": 1433
+              },
+              "failureThreshold": 60,
+              "periodSeconds": 5
+            }
+          }
+        ],
+        "volumes": [
+          {
+            "name": "data",
+            "persistentVolumeClaim": {
+              "claimName": "sql-data"
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+---
+{
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+    "name": "sqlserver"
+  },
+  "spec": {
+    "type": "ClusterIP",
+    "selector": {
+      "app": "sqlserver"
+    },
+    "ports": [
+      {
+        "name": "http",
+        "port": 1433,
+        "targetPort": 1433
+      }
+    ]
+  }
+}
+---
+{
+  "apiVersion": "apps/v1",
+  "kind": "Deployment",
+  "metadata": {
+    "name": "rabbitmq"
+  },
+  "spec": {
+    "replicas": 1,
+    "selector": {
+      "matchLabels": {
+        "app": "rabbitmq"
+      }
+    },
+    "strategy": {
+      "type": "Recreate"
+    },
+    "template": {
+      "metadata": {
+        "labels": {
+          "app": "rabbitmq"
+        }
+      },
+      "spec": {
+        "containers": [
+          {
+            "name": "rabbitmq",
+            "image": "rabbitmq:4-management",
+            "imagePullPolicy": "IfNotPresent",
+            "ports": [
+              {
+                "containerPort": 5672
+              }
+            ],
+            "resources": {
+              "requests": {
+                "cpu": "100m",
+                "memory": "128Mi"
+              },
+              "limits": {
+                "cpu": "2",
+                "memory": "512Mi"
+              }
+            },
+            "env": [
+              {
+                "name": "RABBITMQ_DEFAULT_USER",
+                "value": "fcg-stage6"
+              }
+            ],
+            "envFrom": [
+              {
+                "secretRef": {
+                  "name": "rabbit-secrets"
+                }
+              }
+            ],
+            "readinessProbe": {
+              "tcpSocket": {
+                "port": 5672
+              },
+              "initialDelaySeconds": 10,
+              "periodSeconds": 5
+            },
+            "livenessProbe": {
+              "tcpSocket": {
+                "port": 5672
+              },
+              "initialDelaySeconds": 60,
+              "periodSeconds": 10
+            },
+            "startupProbe": {
+              "tcpSocket": {
+                "port": 5672
+              },
+              "failureThreshold": 60,
+              "periodSeconds": 5
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+---
+{
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+    "name": "rabbitmq"
+  },
+  "spec": {
+    "type": "ClusterIP",
+    "selector": {
+      "app": "rabbitmq"
+    },
+    "ports": [
+      {
+        "name": "http",
+        "port": 5672,
+        "targetPort": 5672
+      }
+    ]
+  }
+}
+---
+{
+  "apiVersion": "apps/v1",
+  "kind": "Deployment",
+  "metadata": {
+    "name": "redis"
+  },
+  "spec": {
+    "replicas": 1,
+    "selector": {
+      "matchLabels": {
+        "app": "redis"
+      }
+    },
+    "strategy": {
+      "type": "Recreate"
+    },
+    "template": {
+      "metadata": {
+        "labels": {
+          "app": "redis"
+        }
+      },
+      "spec": {
+        "containers": [
+          {
+            "name": "redis",
+            "image": "redis:7.4-alpine",
+            "imagePullPolicy": "IfNotPresent",
+            "ports": [
+              {
+                "containerPort": 6379
+              }
+            ],
+            "resources": {
+              "requests": {
+                "cpu": "100m",
+                "memory": "64Mi"
+              },
+              "limits": {
+                "cpu": "2",
+                "memory": "128Mi"
+              }
+            },
+            "args": [
+              "--save",
+              "",
+              "--appendonly",
+              "no",
+              "--maxmemory",
+              "64mb",
+              "--maxmemory-policy",
+              "allkeys-lru"
+            ],
+            "readinessProbe": {
+              "tcpSocket": {
+                "port": 6379
+              },
+              "initialDelaySeconds": 10,
+              "periodSeconds": 5
+            },
+            "livenessProbe": {
+              "tcpSocket": {
+                "port": 6379
+              },
+              "initialDelaySeconds": 60,
+              "periodSeconds": 10
+            },
+            "startupProbe": {
+              "tcpSocket": {
+                "port": 6379
+              },
+              "failureThreshold": 60,
+              "periodSeconds": 5
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+---
+{
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+    "name": "redis"
+  },
+  "spec": {
+    "type": "ClusterIP",
+    "selector": {
+      "app": "redis"
+    },
+    "ports": [
+      {
+        "name": "http",
+        "port": 6379,
+        "targetPort": 6379
+      }
+    ]
+  }
+}
+---
+{
+  "apiVersion": "apps/v1",
+  "kind": "Deployment",
+  "metadata": {
+    "name": "users-api"
+  },
+  "spec": {
+    "replicas": 1,
+    "selector": {
+      "matchLabels": {
+        "app": "users-api"
+      }
+    },
+    "strategy": {
+      "type": "Recreate"
+    },
+    "template": {
+      "metadata": {
+        "labels": {
+          "app": "users-api"
+        }
+      },
+      "spec": {
+        "containers": [
+          {
+            "name": "users-api",
+            "image": "fcg-users:stage6",
+            "imagePullPolicy": "Never",
+            "ports": [
+              {
+                "containerPort": 8080
+              }
+            ],
+            "resources": {
+              "requests": {
+                "cpu": "100m",
+                "memory": "128Mi"
+              },
+              "limits": {
+                "cpu": "2",
+                "memory": "512Mi"
+              }
+            },
+            "env": [
+              {
+                "name": "ASPNETCORE_ENVIRONMENT",
+                "value": "Production"
+              },
+              {
+                "name": "Jwt__Issuer",
+                "value": "FCG"
+              },
+              {
+                "name": "Jwt__Audience",
+                "value": "FCG"
+              },
+              {
+                "name": "Sqs__Region",
+                "value": "us-east-1"
+              },
+              {
+                "name": "Sqs__QueueUrl",
+                "value": "https://sqs.us-east-1.amazonaws.com/123456789012/stage6-unused"
+              },
+              {
+                "name": "AWS_ACCESS_KEY_ID",
+                "value": "stage6-unused"
+              },
+              {
+                "name": "AWS_SECRET_ACCESS_KEY",
+                "value": "stage6-unused"
+              },
+              {
+                "name": "AWS_EC2_METADATA_DISABLED",
+                "value": "true"
+              },
+              {
+                "name": "AdminSeed__Enabled",
+                "value": "true"
+              },
+              {
+                "name": "AdminSeed__Name",
+                "value": "FCG Admin"
+              },
+              {
+                "name": "AdminSeed__Email",
+                "value": "admin@fcg.local"
+              }
+            ],
+            "envFrom": [
+              {
+                "secretRef": {
+                  "name": "users-secrets"
+                }
+              }
+            ],
+            "readinessProbe": {
+              "httpGet": {
+                "path": "/health",
+                "port": 8080
+              },
+              "initialDelaySeconds": 5,
+              "periodSeconds": 5,
+              "timeoutSeconds": 3
+            },
+            "livenessProbe": {
+              "httpGet": {
+                "path": "/health/live",
+                "port": 8080
+              },
+              "initialDelaySeconds": 30,
+              "periodSeconds": 10
+            },
+            "startupProbe": {
+              "tcpSocket": {
+                "port": 8080
+              },
+              "failureThreshold": 60,
+              "periodSeconds": 5
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+---
+{
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+    "name": "users-api"
+  },
+  "spec": {
+    "type": "ClusterIP",
+    "selector": {
+      "app": "users-api"
+    },
+    "ports": [
+      {
+        "name": "http",
+        "port": 8080,
+        "targetPort": 8080
+      }
+    ]
+  }
+}
+---
+{
+  "apiVersion": "apps/v1",
+  "kind": "Deployment",
+  "metadata": {
+    "name": "catalog-api"
+  },
+  "spec": {
+    "replicas": 1,
+    "selector": {
+      "matchLabels": {
+        "app": "catalog-api"
+      }
+    },
+    "strategy": {
+      "type": "Recreate"
+    },
+    "template": {
+      "metadata": {
+        "labels": {
+          "app": "catalog-api"
+        }
+      },
+      "spec": {
+        "containers": [
+          {
+            "name": "catalog-api",
+            "image": "fcg-catalog:stage6",
+            "imagePullPolicy": "Never",
+            "ports": [
+              {
+                "containerPort": 8080
+              }
+            ],
+            "resources": {
+              "requests": {
+                "cpu": "100m",
+                "memory": "128Mi"
+              },
+              "limits": {
+                "cpu": "2",
+                "memory": "512Mi"
+              }
+            },
+            "env": [
+              {
+                "name": "ASPNETCORE_ENVIRONMENT",
+                "value": "Production"
+              },
+              {
+                "name": "Jwt__Issuer",
+                "value": "FCG"
+              },
+              {
+                "name": "Jwt__Audience",
+                "value": "FCG"
+              },
+              {
+                "name": "RabbitMq__Host",
+                "value": "rabbitmq"
+              },
+              {
+                "name": "RabbitMq__Username",
+                "value": "fcg-stage6"
+              },
+              {
+                "name": "CatalogCache__Configuration",
+                "value": "redis:6379"
+              },
+              {
+                "name": "CatalogCache__TtlSeconds",
+                "value": "60"
+              }
+            ],
+            "envFrom": [
+              {
+                "secretRef": {
+                  "name": "catalog-secrets"
+                }
+              }
+            ],
+            "readinessProbe": {
+              "httpGet": {
+                "path": "/health",
+                "port": 8080
+              },
+              "initialDelaySeconds": 5,
+              "periodSeconds": 5,
+              "timeoutSeconds": 3
+            },
+            "livenessProbe": {
+              "httpGet": {
+                "path": "/health/live",
+                "port": 8080
+              },
+              "initialDelaySeconds": 30,
+              "periodSeconds": 10
+            },
+            "startupProbe": {
+              "tcpSocket": {
+                "port": 8080
+              },
+              "failureThreshold": 60,
+              "periodSeconds": 5
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+---
+{
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+    "name": "catalog-api"
+  },
+  "spec": {
+    "type": "ClusterIP",
+    "selector": {
+      "app": "catalog-api"
+    },
+    "ports": [
+      {
+        "name": "http",
+        "port": 8080,
+        "targetPort": 8080
+      }
+    ]
+  }
+}
