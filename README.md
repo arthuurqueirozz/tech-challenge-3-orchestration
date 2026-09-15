@@ -1,96 +1,224 @@
-# FIAP Cloud Games - Orquestração Fase 3
+# FIAP Cloud Games — Fase 3
 
-Preparação em andamento. Este repositório ainda não permite subir a stack final.
-O enunciado oficial é a referência local `TC NETT - Fase 3.pdf`, páginas 3 a 7.
+Guia central da stack .NET 8: identidade, catálogo, compras e notificações
+simuladas, com Kong, Redis, Prometheus/Grafana e AWS Lambda/SQS/DynamoDB.
+A referência normativa é o PDF local `TC NETT - Fase 3.pdf`, páginas 3 a 7.
+O PDF original não é publicado neste repositório.
 
-## Arquitetura escolhida
+## Arquitetura
 
-Kind local executará UsersAPI, CatalogAPI, PaymentsAPI, SQL Server, RabbitMQ,
-Kong, Redis, Prometheus e Grafana. Kong será a única entrada HTTP de negócio.
-A AWS executará uma Lambda .NET 8, duas filas SQS, DynamoDB e CloudWatch Logs,
-declarados no repositório independente da função por AWS SAM.
+```text
+Cliente -> Kong -> UsersAPI -> SQL Server Users + outbox -> SQS UserCreated
+                -> CatalogAPI -> SQL Server Catalog / Redis
+                         | RabbitMQ OrderPlaced -> PaymentsAPI
+                         | <- RabbitMQ PaymentProcessed <- |
+                                                          +-> SQS PaymentProcessed
+Ambas as filas SQS -> Lambda Notifications -> DynamoDB + CloudWatch Logs
+Prometheus -> /metrics de UsersAPI/CatalogAPI -> Grafana
+```
 
-Opção A de observabilidade: Prometheus coleta UsersAPI/CatalogAPI e Grafana
-exibe latência, total/contagem por status HTTP e taxa de erros. Essa opção
-atende à página 4 do PDF com ferramentas locais e manifests versionados.
-PaymentsAPI mantém a mensageria RabbitMQ com CatalogAPI e envia notificações ao
-SQS. UsersAPI usa SQS pelo outbox existente. NotificationsAPI antiga é apenas referência.
+Kind executa nove componentes: Users, Catalog, Payments, SQL Server, RabbitMQ,
+Redis, Kong, Prometheus e Grafana. Só Kong recebe chamadas externas de negócio.
+As ferramentas de observabilidade têm acesso administrativo local separado.
+NotificationsAPI antiga não integra a stack. DynamoDB armazena eventos flexíveis
+e o efeito durável da simulação; não é enviado e-mail externo. SQL continua
+fonte de verdade para identidade, jogos e biblioteca; Redis é descartável.
 
-## Repositórios
+Opção A: Prometheus coleta UsersAPI/CatalogAPI, e Grafana mostra p95, totais,
+contagem por status, requisições/s e taxas 4xx/5xx. Manifests, datasource e seis
+painéis são provisionados pelo Git. CloudWatch centraliza os logs da Lambda.
+Não se aplicam os agentes/traces exigidos apenas na Opção B.
 
-Cinco projetos ativos independentes, em pastas irmãs:
-- `tech-challenge-2-users-api`
-- `tech-challenge-2-catalog-api`
-- `tech-challenge-2-payments-api`
-- `tech-challenge-3-notifications-function`
-- `tech-challenge-3-orchestration`
+## Repositórios e clones
 
-Destino autorizado: usuário GitHub `arthuurqueirozz`. Repositórios criados:
+Histórico e autoria da Fase 2 preservados; os três projetos evoluídos mantêm a
+tag `fase-2-final` e usam a branch `fase-3`. Publicação autorizada pelo grupo.
+Cinco projetos independentes devem ficar em pastas irmãs:
 
-- [UsersAPI](https://github.com/arthuurqueirozz/tech-challenge-2-users-api)
-- [CatalogAPI](https://github.com/arthuurqueirozz/tech-challenge-2-catalog-api)
-- [PaymentsAPI](https://github.com/arthuurqueirozz/tech-challenge-2-payments-api)
-- [Notifications Function](https://github.com/arthuurqueirozz/tech-challenge-3-notifications-function)
-- [Orchestration](https://github.com/arthuurqueirozz/tech-challenge-3-orchestration)
+```powershell
+git clone --branch fase-3 https://github.com/arthuurqueirozz/tech-challenge-2-users-api.git
+git clone --branch fase-3 https://github.com/arthuurqueirozz/tech-challenge-2-catalog-api.git
+git clone --branch fase-3 https://github.com/arthuurqueirozz/tech-challenge-2-payments-api.git
+git clone https://github.com/arthuurqueirozz/tech-challenge-3-notifications-function.git
+git clone https://github.com/arthuurqueirozz/tech-challenge-3-orchestration.git
+cd tech-challenge-3-orchestration
+```
 
-As bases do grupo são de
-`leo-bernar`; autorização para publicar versões modificadas confirmada.
-Os três projetos evoluídos preservam histórico e tag `fase-2-final`.
-A pasta contêiner não é um monorepositório.
+Links: [Users](https://github.com/arthuurqueirozz/tech-challenge-2-users-api),
+[Catalog](https://github.com/arthuurqueirozz/tech-challenge-2-catalog-api),
+[Payments](https://github.com/arthuurqueirozz/tech-challenge-2-payments-api),
+[Notifications Function](https://github.com/arthuurqueirozz/tech-challenge-3-notifications-function)
+e [Orchestration](https://github.com/arthuurqueirozz/tech-challenge-3-orchestration).
 
-## Preparação
+## Pré-requisitos
 
-Git, SDK .NET 8, Docker Desktop com containers Linux, Kind, kubectl,
-AWS CLI, SAM CLI, Git Bash, curl e jq. No Windows, abra novo terminal após
-instalar ferramentas. Os scripts Bash herdados serão executados pelo Git Bash.
-Copie `.env.example` para `.env` e preencha apenas localmente.
+- Windows/PowerShell, Git, .NET SDK 8, Docker Desktop com containers Linux,
+  Kind, kubectl, AWS CLI v2 e AWS SAM CLI. Os scripts finais são PowerShell;
+  Git Bash/curl/jq são necessários apenas para scripts históricos em Bash.
+- Ferramentas no PATH; abra outro terminal após instalar. Os scripts reconhecem
+  também instalações Windows por usuário de AWS CLI e Kind via WinGet.
+- Docker Linux ativo, aproximadamente 16 GB de memória disponíveis ao motor,
+  espaço para imagens .NET/SQL e PVCs locais SQL 2 GiB + RabbitMQ 1 GiB.
+- Conta AWS própria ou autorizada em us-east-1 e perfil local `fiap-fase3`.
+  Nesta implementação, as trusts dos produtores exigem o usuário IAM
+  `fiap-fase3-cli`. A chave de deploy fica no host, nunca nos containers.
+- IAM/SAM configurados conforme o
+  [guia de permissões da função](https://github.com/arthuurqueirozz/tech-challenge-3-notifications-function/blob/main/iam/README.md).
+  O responsável precisa anexar a política de deploy renderizada para sua conta.
+  Não use o ID da conta de outra pessoa e não publique credenciais.
 
-Perfil AWS: `fiap-fase3`; região: `us-east-1`; teto solicitado: USD 1/mês.
-Sem créditos promocionais. [Estimativa e limites de uso](docs/CUSTOS.md):
-cerca de USD 0,20 para as sessões mensais descritas, sem descontos gratuitos.
-O SAM mantém os gatilhos pausados por padrão; habilitar nos testes e pausar ao terminar.
-O login IAM via chave foi configurado pelo responsável após falha de OAuth.
-O perfil do host não é automaticamente disponibilizado aos containers:
-a etapa integrada deve renderizar Secrets locais, ignorados pelo Git.
-A Lambda utiliza sua execution role; Docker Linux já foi iniciado e verificado.
+.NET 8 é a base preservada. Verifique
+[suporte Lambda](https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html)
+antes de um deploy futuro; não faça upgrade silencioso de framework.
 
-## Estado e próximos gates
+## AWS: primeira instalação
 
-Etapa 1: baselines da Fase 2 passaram em 53 testes; branches e tags preservadas.
-Etapas 2 e 3: stack AWS criada; 18 testes locais, lint e build SAM passaram.
-Smoke real passou em 18 verificações, incluindo os dois eventos por SQS,
-duplicidade, lote parcial e recuperação automática após falha de dependência.
-Resultados e limites em [EVIDENCIAS-CLOUD.md](docs/EVIDENCIAS-CLOUD.md).
-Etapa 4 concluída: 28 testes UsersAPI, 12 PaymentsAPI e 11 verificações integradas
-com AWS real, falhas parciais, recuperação e logs dos cinco eventos sintéticos.
-[Executar o ensaio dos produtores](docs/ETAPA-4.md) e
-[consultar evidências](docs/EVIDENCIAS-ETAPA-4.md).
-As roles dos produtores permitem somente SendMessage na respectiva fila;
-os containers recebem sessões STS temporárias. Ensaio encerrado com containers
-parados e gatilhos Lambda desabilitados, preservando dados.
-Etapa 5 concluída: Redis no catálogo público com TTL/invalidação e fallback SQL;
-29 testes CatalogAPI e 21 verificações HTTP com Redis/SQL reais passaram.
-Hits de lista/detalhe reduziram SELECTs de 1 para 0. Startup sem Redis e
-reconexão também validados, sem mudanças AWS.
-[Executar o ensaio de cache](docs/ETAPA-5.md) e
-[consultar evidências](docs/EVIDENCIAS-ETAPA-5.md).
-Etapa 6 concluída no gate técnico: métricas nas duas APIs, Prometheus/Grafana no
-Kind, datasource e dashboard provisionados por Git. 59 testes locais e 33
-verificações integradas passaram; 94 requisições conferidas por serviço/status,
-incluindo oito erros 500 reais e recuperação. Consultas dos seis painéis
-validadas via Grafana; inspeção visual no navegador ainda pendente.
-[Executar e acessar o dashboard](docs/ETAPA-6.md) e
-[consultar evidências](docs/EVIDENCIAS-ETAPA-6.md).
-Etapa 7 concluída no gate técnico: Kong OSS 3.9.3 no Kind, configuração
-declarativa e JWT com segredo local. 71 verificações passaram; 52 chamadas HTTP
-somente pelo gateway, com validação de tokens e permissões Admin/User.
-Recuperação do ambiente após reinício do computador também executada.
-[Implantar, recuperar e acessar o Kong](docs/ETAPA-7.md) e
-[consultar evidências](docs/EVIDENCIAS-ETAPA-7.md).
-Etapa 8 ainda precisa consolidar todos os componentes e validar cadastro,
-compra e notificações pelo gateway, com deploy completo do zero.
-Vídeo e relatório permanecem pendentes.
+Defina apenas dados não secretos; estes valores são usados nos comandos seguintes:
 
-O README central receberá os comandos validados de build/carga no Kind,
-deploy integrado, inicialização, acesso via Kong, dashboard, diagnóstico e
-limpeza conforme os respectivos gates forem executados.
+```powershell
+$AccountId = 'SEU_ID_AWS_DE_12_DIGITOS'
+$Profile = 'fiap-fase3'
+aws configure set region us-east-1 --profile $Profile
+aws sts get-caller-identity --profile $Profile
+$Bucket = "fcg-fase3-artifacts-$AccountId-us-east-1"
+```
+
+Autentique o perfil local pelo mecanismo disponível na conta. Na conta deste
+projeto, o responsável configurou uma chave IAM após falha de OAuth.
+Não cole chaves em scripts, README ou chat. O STS deve retornar a conta esperada
+e o usuário de deploy; ele sozinho não comprova todas as permissões.
+
+O bucket privado é suporte aos artefatos SAM. Consulte primeiro sua existência;
+em conta nova, crie apenas após confirmar ausência (404), nunca por erro 403:
+
+```powershell
+aws s3api head-bucket --bucket $Bucket --expected-bucket-owner $AccountId --profile $Profile --region us-east-1
+# Apenas se confirmada ausência:
+aws s3api create-bucket --bucket $Bucket --profile $Profile --region us-east-1
+aws s3api put-public-access-block --bucket $Bucket --public-access-block-configuration 'BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true' --profile $Profile --region us-east-1
+aws s3api get-bucket-encryption --bucket $Bucket --profile $Profile --region us-east-1
+```
+
+Build e deploy, a partir da pasta de orquestração:
+
+```powershell
+Push-Location ../tech-challenge-3-notifications-function
+sam validate --lint --template-file template.yaml --region us-east-1
+sam build --template-file template.yaml
+sam deploy --template-file .aws-sam/build/template.yaml --stack-name fcg-fase3-notifications --s3-bucket $Bucket --capabilities CAPABILITY_NAMED_IAM --region us-east-1 --profile $Profile --parameter-overrides NotificationsEnabled=false --confirm-changeset
+Pop-Location
+aws cloudformation describe-stacks --stack-name fcg-fase3-notifications --profile $Profile --region us-east-1 --query 'Stacks[0].{Status:StackStatus,Outputs:Outputs}'
+```
+
+Revise os recursos do changeset antes de executá-lo. A stack cria filas, função,
+tabela, log group e roles restritas; não inclui EKS, VPC, NAT ou servidores AWS.
+Se a stack já existe e está CREATE_COMPLETE/UPDATE_COMPLETE com o template
+atual, reutilize-a. Não a apague para repetir os testes. Contratos, idempotência,
+falhas parciais e remoção cloud estão no
+[README da função](https://github.com/arthuurqueirozz/tech-challenge-3-notifications-function).
+
+## Build e deploy completo no Kind
+
+Com Docker Desktop Linux iniciado e a stack AWS pronta:
+
+```powershell
+./scripts/deploy.ps1 -AccountId $AccountId -Profile $Profile
+./scripts/start-access.ps1
+./scripts/run-smoke.ps1 -AccountId $AccountId -Profile $Profile
+```
+
+O deploy compila e carrega as três imagens, cria o cluster `fcg-fase3` se ausente,
+usa kubeconfig isolado `fase3.kubeconfig.local.yaml`, namespace `fcg` e
+`k8s/final`. Gera segredos locais uma única vez, consulta outputs SAM, assume
+roles Users/Payments por uma hora e injeta Secrets. Banco/PVC e RabbitMQ/PVC
+persistem entre paradas. SQL/Rabbit/Redis são aguardados antes de reiniciar APIs.
+Schemas são criados/migrados pelas APIs; admin local `admin@fcg.local` é semeado.
+Sua senha aleatória fica em `fase3-settings.local.json`.
+
+O smoke reaproveita os cenários de JWT/papéis da etapa 7, habilita os dois
+gatilhos por changeset, valida cadastro, login, compras aprovadas/rejeitadas,
+biblioteca, notificações DynamoDB, cache e métricas, e pausa os gatilhos em
+`finally`. Só aceita changesets com alteração de Enabled nos dois mappings,
+sem troca de recursos. Logs CloudWatch são coletados após a pausa. Não feche
+o terminal durante o teste; se ele for interrompido, execute o encerramento abaixo.
+
+O ensaio usa dados sintéticos: jogos de preços 59,90 (aprovado) e 150,00
+(rejeitado), limite de pagamento 100. Registros completos de integração são
+preservados como evidência. A fixture User do smoke de autorização é removida.
+Uma falha SQL controlada renomeia temporariamente Users/Games e restaura ambas
+em finally para gerar 500 reais nas métricas; use apenas neste ambiente local.
+
+## Acessar e demonstrar
+
+| Uso | Endereço |
+|---|---|
+| Negócio, somente Kong | http://127.0.0.1:18000 |
+| Grafana, Viewer local | http://127.0.0.1:13000/d/fcg-http |
+| Prometheus, diagnóstico local | http://127.0.0.1:19090 |
+
+Não abra port-forward para APIs. `start-access.ps1` encerra os acessos registrados
+das etapas 6/7 e abre somente os três acima, todos em 127.0.0.1.
+Kong DB-less usa rotas/métodos explícitos e JWT HS256 nas rotas protegidas;
+as APIs mantêm audience/lifetime e a policy Admin. Rotas e detalhes em
+[ETAPA-7.md](docs/ETAPA-7.md). `/metrics`, `/health`, Swagger e a administração
+do Kong não são rotas públicas. Seu Admin API está desligado.
+
+Grafana provisiona os painéis automaticamente; não exige importar JSON à mão.
+Gere tráfego com o smoke e visualize a janela dos últimos 15 minutos. Taxas e p95
+usam 2 minutos; totais reiniciam com os processos. Valores sem tráfego recente
+podem estar vazios; 4xx do próprio Kong não chegam aos contadores das APIs.
+
+## Renovar credenciais e recuperar após reinício
+
+Antes de expirar a sessão STS (uma hora), ou após uma pausa longa:
+
+```powershell
+./scripts/prepare-secrets.ps1 -AccountId $AccountId -Profile $Profile -Apply
+```
+
+O comando obtém novas sessões, aplica os Secrets e reinicia Users/Payments.
+O perfil do host precisa estar válido. Credenciais temporárias de laboratório,
+se usadas no perfil, devem ser renovadas pelo responsável primeiro.
+Mudar o arquivo local sem reiniciar os pods não atualiza as variáveis do processo.
+Não altere senhas SQL/Rabbit manualmente com PVCs existentes; os dados persistidos
+continuam associados às senhas originais. Segredos, kubeconfig, PIDs e evidências
+brutas `*.local.*` são ignorados pelo Git.
+
+Após reiniciar o PC: inicie Docker Desktop, execute `stop-access.ps1` para limpar
+o registro antigo, depois `deploy.ps1`, `start-access.ps1` e o smoke. O deploy
+reutiliza cluster e dados e renova STS. Se PID foi reutilizado por outro processo,
+o script recusa encerrá-lo; confira sua identidade antes de remover apenas o
+registro local obsoleto. Um deploy repetido faz rebuild/restart das APIs.
+
+## Diagnóstico e encerramento
+
+```powershell
+kubectl --kubeconfig fase3.kubeconfig.local.yaml --context kind-fcg-fase3 -n fcg get deployments,pods,pvc
+kubectl --kubeconfig fase3.kubeconfig.local.yaml --context kind-fcg-fase3 -n fcg logs deployment/payments-api --tail=30
+aws logs tail /aws/lambda/fcg-fase3-notifications --since 10m --profile $Profile --region us-east-1
+./scripts/stop.ps1 -AccountId $AccountId -Profile $Profile
+```
+
+O encerramento confirma mappings Disabled, fecha port-forwards e para apenas o
+nó final, preservando dados. Após interrupção/reinício, confira a pausa AWS mesmo
+que Docker já esteja parado. Mensagens SQS expiram em quatro dias; processe
+pendências antes de pausas longas. Não apague cluster/PVC ou stack para encerrar.
+
+Teto solicitado pelo responsável: USD 1/mês, sem créditos.
+[Estimativa e limites de sessão](docs/CUSTOS.md): uso pequeno e gatilhos pausados
+fora dos testes. Alertas não bloqueiam cobranças. Não deixe os gatilhos ligados
+continuamente; parar Docker não pausa Lambda. Armazenamento cloud permanece.
+
+## Validação e entrega
+
+[Progresso](docs/PROGRESSO.md) e [matriz](docs/MATRIZ-REQUISITOS.md) distinguem
+código, validação executada e entrega acadêmica. Evidências anteriores:
+[cloud](docs/EVIDENCIAS-CLOUD.md), [produtores](docs/EVIDENCIAS-ETAPA-4.md),
+[cache](docs/EVIDENCIAS-ETAPA-5.md), [métricas](docs/EVIDENCIAS-ETAPA-6.md) e
+[gateway](docs/EVIDENCIAS-ETAPA-7.md). A instalação final passou em
+[98 verificações](docs/EVIDENCIAS-ETAPA-8.md), incluindo os três eventos cloud.
+[Revisão técnica](docs/REVISAO-TECNICA.md): 89 testes, builds, formatação e auditoria
+NuGet concluídos. [Roteiro do vídeo](docs/ROTEIRO-VIDEO.md) e
+[preparação da entrega](docs/ENTREGA.md).
+Vídeo de até 20 minutos e relatório PDF/TXT com os dados do grupo continuam
+obrigatórios; não são considerados entregues por haver código publicado.

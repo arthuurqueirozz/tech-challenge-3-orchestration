@@ -1,10 +1,23 @@
 # Progresso - FIAP Fase 3
 
-Atualizado em 2026-09-14.
+Atualizado em 2026-09-15.
 
 ## Etapa atual
 
-Etapas 0 a 7 concluídas em seus gates técnicos. Kong implantado no Kind com rotas e JWT declarativos; 71 verificações passaram, com todas as 52 chamadas HTTP do smoke pelo gateway. Evidências em `tech-challenge-3-orchestration/docs/EVIDENCIAS-ETAPA-7.md`. Próxima etapa: 8, orquestração e teste integrado. Inspeção visual do dashboard, vídeo e relatório ainda pendentes.
+Etapas 0 a 8 concluídas em seus gates técnicos. Stack final Kind + AWS validada em 98 verificações; revisão técnica da etapa 9 executada com 89 testes, builds, formatação e auditoria NuGet. Evidências em `tech-challenge-3-orchestration/docs/EVIDENCIAS-ETAPA-8.md` e `docs/REVISAO-TECNICA.md`. Gate final da etapa 9 pendente: inspeção visual do dashboard, vídeo e relatório.
+
+## Etapas 8 e 9 — estado atual
+
+- Stack final em k8s/final, reutilizando gateway/monitoramento e base da Fase 2. Kind novo fcg-fase3, namespace fcg e kubeconfig isolado; nove deployments disponíveis. SQL PVC 2 GiB e RabbitMQ PVC 1 GiB. NotificationsAPI histórica ausente.
+- README central refeito com clones, configuração AWS/SAM, build/carga de três imagens, deploy, dados iniciais, Kong, dashboard, smoke, renovação de credenciais e encerramento. READMEs das APIs apontam para o guia integrado; scripts históricos preservados.
+- Users/Payments recebem sessões STS de uma hora das roles restritas, por Secrets locais ignorados. Chave de deploy fica no host. Rotas/serviços/plugins Kong versionados, chave local compartilhada com as APIs. Sem novos recursos cloud.
+- 71 verificações de gateway + 26 do fluxo integrado + correlação dos três logs CloudWatch = 98. Cadastro completo/outbox/SQS/Lambda/DynamoDB, compra aprovada e rejeitada, biblioteca, CRUD, Redis TTL/hit/invalidação e queries dos seis painéis passaram. Dois 500 reais via Kong com tabelas SQL restauradas e APIs recuperadas.
+- Smoke final em 2026-09-15 04:52:22–04:53:38 UTC do host; relógio local cerca de 2 min 30 s adiantado frente à AWS, correlação por eventKey. As filas ficaram drenadas, sem erros RabbitMQ; dois mappings Disabled em finally. Tentativa anterior falhou por colisão de variável do teste e também confirmou a pausa automática.
+- Reinício real do PC preservou volumes e nove deployments. Credenciais expiradas foram renovadas com prepare-secrets.ps1 -Apply, Users/Payments disponíveis. Ao encerrar: stack UPDATE_COMPLETE, NotificationsEnabled=false, ambos mappings Disabled, dois clusters parados em exited e port-forwards encerrados.
+- Revisão: Users 29 testes, Catalog 30, Payments 12, função 18; total 89 sem falhas/pulados. Builds Docker das APIs, lint/build SAM e formatação das quatro soluções passaram. Oito ajustes de espaços/quebras em quatro arquivos da função; sem alteração funcional/dependências nem redeploy Lambda por formatação. Auditoria NuGet direta/transitiva sem vulnerabilidades conhecidas retornadas.
+- Cinco repositórios públicos conferidos via GitHub CLI. Roteiro de 18 minutos e preparação de links/pendências do relatório em docs/ROTEIRO-VIDEO.md e docs/ENTREGA.md; arquivo final PDF/TXT não foi gerado, conforme divisão de trabalho do plano.
+- Inspeção visual Firefox bloqueada pela ferramenta porque a política de URLs não é suportada nesse navegador. Não houve screenshot; dados/queries Grafana validados pela API. Dados do grupo, participantes/Discord, prazo e URL do vídeo ainda pendentes de fornecimento.
+- Commits da revisão: UsersAPI 69f1070, CatalogAPI b4bfa23, PaymentsAPI 3ad9365 (links dos READMEs); função 89349f8 (somente formatação). Orquestração registra os manifests, scripts finais e evidências no commit desta atualização. Baselines e tags anteriores preservadas.
 
 ## Etapa 7 — estado atual
 
@@ -120,10 +133,10 @@ Conta confirmada pelo usuário: conta própria, sob sua responsabilidade. Qualqu
 1. Aplicar os limites de sessões e volume de `docs/CUSTOS.md` da orquestração; conferir uso real após o primeiro ensaio frente ao teto de USD 1/mês. Não presumir gratuidade; ausência de créditos já confirmada.
 2. Perfil `fiap-fase3` validado com STS; produtores já usam roles restritas com SendMessage. Renovar sessões temporárias pelo script prepare-stage4 antes dos ensaios e recriar containers para carregar os valores.
 3. Política de deploy validada na criação real; remover recursos e outros caminhos ainda exigem validação quando executados.
-4. Adaptar o preparo das credenciais temporárias para Secrets locais do Kind na etapa integrada; manter arquivos fora do Git.
+4. Preparo das credenciais temporárias adaptado e validado no Kind por prepare-secrets.ps1 -Apply; manter arquivos fora do Git e renovar antes das demonstrações.
 5. Destino GitHub autorizado: usuário pessoal `arthuurqueirozz`, confirmado pela API autenticada; autorização do grupo para republicação confirmada pelo usuário. Não foi inventada licença para código do grupo.
 6. Docker Linux iniciado e recursos conferidos; verificar portas ao preparar a stack integrada. Kind/jq já instalados.
-7. Gates cloud, produtores, Redis, métricas e Kong (Etapas 2 a 7) concluídos; avançar para orquestração e teste integrado (Etapa 8). Manter inspeção visual do dashboard, vídeo/relatório e demais entregáveis pendentes.
+7. Gates técnicos das etapas 0 a 8 concluídos; revisão técnica da etapa 9 executada. Manter inspeção visual do dashboard, vídeo/relatório e gate acadêmico final pendentes, conforme docs/ENTREGA.md.
 
 Os pré-requisitos não exigem criar manualmente filas, tabela ou função: esses recursos serão declarados no SAM na etapa prevista. S3 é suporte ao upload dos artefatos de deploy, não um novo componente de negócio.
 

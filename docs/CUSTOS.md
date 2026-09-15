@@ -61,7 +61,19 @@ valor real, mas não foram usados neste cálculo. A consulta GetFreeTierUsage
 funcionou; o retorno inicial continha apenas uso de Glue e KMS e não comprova
 a franquia disponível para todos os serviços deste projeto.
 
+## Registro de uso
+
+Registro de 2026-09-15: a consulta GetFreeTierUsage retornou SQS com uso 2 e
+franquia de 1.000.000 de requests, além de Glue/SNS/KMS. Esse retorno não é fatura,
+pode ter atraso e não mede isoladamente este projeto. A estimativa acima continua
+sem descontar benefícios. Na etapa 8, gatilhos foram ativados somente nos ensaios
+e pausados em finally, inclusive após falha do script. O teste final registrou
+três eventos e drenou ambas as filas. Após reinício do PC, confirmou-se novamente
+NotificationsEnabled=false e dois mappings Disabled. Fatura real não consultada;
+nenhum aumento do teto autorizado e nenhum novo recurso cloud criado nesta etapa.
+
 ## Fontes oficiais consultadas
+
 
 - [SQS e franquia mensal](https://aws.amazon.com/sqs/pricing/)
 - [Tarifa SQS em exemplo oficial vigente](https://docs.aws.amazon.com/solutions/latest/automated-security-response-on-aws/cost.html)

@@ -1,8 +1,16 @@
+param(
+    [string]$KubeconfigName = 'stage6.kubeconfig.local.yaml',
+    [string]$Context = 'kind-fcg-fase3-stage6',
+    [string]$Namespace = 'fcg-stage6',
+    [string]$SettingsName = 'stage6-settings.local.json',
+    [string]$EvidenceName = 'stage7-evidence.local.json',
+    [switch]$AllowMonitoringAccess
+)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Net.Http
 $repo = Split-Path $PSScriptRoot -Parent
-$settings = Get-Content -Raw (Join-Path $repo 'stage6-settings.local.json') | ConvertFrom-Json
-$kube = @('--kubeconfig', (Join-Path $repo 'stage6.kubeconfig.local.yaml'), '--context', 'kind-fcg-fase3-stage6', '-n', 'fcg-stage6')
+$settings = Get-Content -Raw (Join-Path $repo $SettingsName) | ConvertFrom-Json
+$kube = @('--kubeconfig', (Join-Path $repo $KubeconfigName), '--context', $Context, '-n', $Namespace)
 $checks = New-Object 'System.Collections.Generic.List[object]'
 $started = [DateTimeOffset]::UtcNow
 $handler = [Net.Http.HttpClientHandler]::new()
@@ -33,8 +41,10 @@ function Request([string]$Method, [string]$Path, [int]$Status, [string]$Token = 
     finally { if ($response) { $response.Dispose() }; $request.Dispose() }
 }
 function Sql([string]$Statement) {
-    $command = 'SQLCMDPASSWORD=$MSSQL_SA_PASSWORD /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -b -d FcgUsersDb'
-    $null = $Statement | & kubectl @kube exec -i deployment/sqlserver -- bash -c $command
+    # Encode synthetic SQL to avoid BOM injection by Windows native stdin bridges.
+    $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Statement))
+    $command = 'printf %s ' + $encoded + ' | base64 -d | SQLCMDPASSWORD=$MSSQL_SA_PASSWORD /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -b -d FcgUsersDb'
+    $null = & kubectl @kube exec deployment/sqlserver -- bash -c $command
     if ($LASTEXITCODE -ne 0) { throw 'Isolated SQL fixture operation failed.' }
 }
 function Base64Url([byte[]]$Bytes) { [Convert]::ToBase64String($Bytes).TrimEnd('=').Replace('+','-').Replace('/','_') }
@@ -58,7 +68,8 @@ try {
     Assert-True (@($deployments | Where-Object { $_.spec.template.spec.hostNetwork -or @($_.spec.template.spec.containers.ports | Where-Object hostPort).Count -gt 0 }).Count -eq 0) 'No deployment exposes hostNetwork or hostPort'
     Assert-True (@(Get-NetTCPConnection -LocalPort 18080,18081 -State Listen -ErrorAction SilentlyContinue).Count -eq 0) 'Direct API access ports 18080/18081 are closed'
     $forwards = @(Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'kubectl.exe' -and $_.CommandLine -match 'port-forward' })
-    Assert-True ($forwards.Count -eq 1 -and $forwards[0].CommandLine.Contains('service/kong 18000:8000')) 'Only the Kong port-forward is active'
+    $allowedForwards = if ($AllowMonitoringAccess) { @('service/kong 18000:8000','service/prometheus 19090:9090','service/grafana 13000:3000') } else { @('service/kong 18000:8000') }
+    Assert-True ($forwards.Count -eq $allowedForwards.Count -and @($forwards | Where-Object { $line = $_.CommandLine; !$line.Contains((Join-Path $repo $KubeconfigName)) -or @($allowedForwards | Where-Object { $line.Contains($_) }).Count -ne 1 }).Count -eq 0) 'Only Kong and explicitly allowed monitoring port-forwards are active'
     $kongService = $services | Where-Object { $_.metadata.name -eq 'kong' }
     Assert-True ($kongService.spec.ports.Count -eq 1 -and $kongService.spec.ports[0].port -eq 8000) 'Kong Service exposes proxy only; admin/status are not routed'
     $null = Request GET '/api/games' 200
@@ -136,5 +147,5 @@ finally {
 }
 Assert-True $true 'Temporary User fixture removed; no registration or purchase event produced'
 $evidence = @{ startedAtUtc = $started.ToString('O'); finishedAtUtc = [DateTimeOffset]::UtcNow.ToString('O'); gateway = 'http://127.0.0.1:18000'; checks = $checks.ToArray(); total = $checks.Count }
-[IO.File]::WriteAllText((Join-Path $repo 'stage7-evidence.local.json'), ($evidence | ConvertTo-Json -Depth 8), (New-Object Text.UTF8Encoding($false)))
+[IO.File]::WriteAllText((Join-Path $repo $EvidenceName), ($evidence | ConvertTo-Json -Depth 8), (New-Object Text.UTF8Encoding($false)))
 Write-Host ("Stage 7 smoke passed: " + $checks.Count + ' checks. No tokens or passwords persisted in evidence.')

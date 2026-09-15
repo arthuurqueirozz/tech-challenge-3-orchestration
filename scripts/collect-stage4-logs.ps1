@@ -1,7 +1,7 @@
-param([string]$Profile = 'fiap-fase3', [int]$TimeoutSeconds = 600)
+param([string]$Profile = 'fiap-fase3', [int]$TimeoutSeconds = 600, [string]$EvidenceName = 'stage4-smoke.local.json')
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
-$evidencePath = Join-Path $repo 'stage4-smoke.local.json'
+$evidencePath = Join-Path $repo $EvidenceName
 $evidence = Get-Content -Raw -LiteralPath $evidencePath | ConvertFrom-Json
 $awsCommand = Get-Command aws -ErrorAction SilentlyContinue
 $awsExe = if ($awsCommand) { $awsCommand.Source } else { Join-Path $env:LOCALAPPDATA 'Programs\Amazon\AWSCLIV2\aws.exe' }
@@ -34,7 +34,7 @@ do {
     Start-Sleep -Seconds 15
 } while ($true)
 $evidence.cloudLogs = @($logs.ToArray())
-$description = 'CloudWatch logs correlated for all five integrated events'
+$description = 'CloudWatch logs correlated for all ' + $evidence.eventKeys.Count + ' integrated events'
 $evidence.checks = @($evidence.checks | Where-Object check -ne $description) + @(@{ check = $description; atUtc = [DateTimeOffset]::UtcNow.ToString('O') })
 [IO.File]::WriteAllText($evidencePath, ($evidence | ConvertTo-Json -Depth 20), (New-Object Text.UTF8Encoding($false)))
 Write-Host "PASS: $description ($($logs.Count) log entries)"
