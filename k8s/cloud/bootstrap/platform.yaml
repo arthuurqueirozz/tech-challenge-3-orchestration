@@ -1,0 +1,505 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sqlserver
+  namespace: fcg-platform
+  labels:
+    app.kubernetes.io/part-of: fcg
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: sqlserver
+  template:
+    metadata:
+      labels:
+        app: sqlserver
+        app.kubernetes.io/part-of: fcg
+    spec:
+      serviceAccountName: sqlserver
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 45
+      containers:
+      - name: sqlserver
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: tcp
+          containerPort: 1433
+        resources:
+          requests:
+            cpu: 500m
+            memory: 2Gi
+          limits:
+            cpu: '2'
+            memory: 4Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+        startupProbe:
+          tcpSocket:
+            port: 1433
+          failureThreshold: 60
+          periodSeconds: 5
+          timeoutSeconds: 3
+        readinessProbe:
+          tcpSocket:
+            port: 1433
+          periodSeconds: 5
+          timeoutSeconds: 3
+        livenessProbe:
+          tcpSocket:
+            port: 1433
+          periodSeconds: 10
+          timeoutSeconds: 3
+        env:
+        - name: ACCEPT_EULA
+          value: Y
+        - name: MSSQL_PID
+          value: Developer
+        - name: MSSQL_MEMORY_LIMIT_MB
+          value: '2048'
+        - name: MSSQL_SA_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: sql-bootstrap-secrets
+              key: MSSQL_SA_PASSWORD
+        volumeMounts:
+        - name: data
+          mountPath: /var/opt/mssql
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 0
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+      nodeSelector:
+        topology.kubernetes.io/zone: __AVAILABILITY_ZONE_A__
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: sql-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sqlserver
+  namespace: fcg-platform
+  labels:
+    app.kubernetes.io/part-of: fcg
+spec:
+  type: ClusterIP
+  selector:
+    app: sqlserver
+  ports:
+  - name: tcp
+    port: 1433
+    targetPort: 1433
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rabbitmq
+  namespace: fcg-platform
+  labels:
+    app.kubernetes.io/part-of: fcg
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: rabbitmq
+  template:
+    metadata:
+      labels:
+        app: rabbitmq
+        app.kubernetes.io/part-of: fcg
+    spec:
+      serviceAccountName: rabbitmq
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 45
+      containers:
+      - name: rabbitmq
+        image: rabbitmq:4-management
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: tcp
+          containerPort: 5672
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: '1'
+            memory: 512Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+        startupProbe:
+          tcpSocket:
+            port: 5672
+          failureThreshold: 60
+          periodSeconds: 5
+          timeoutSeconds: 3
+        readinessProbe:
+          tcpSocket:
+            port: 5672
+          periodSeconds: 5
+          timeoutSeconds: 3
+        livenessProbe:
+          tcpSocket:
+            port: 5672
+          periodSeconds: 10
+          timeoutSeconds: 3
+        env:
+        - name: RABBITMQ_DEFAULT_USER
+          value: fcg
+        - name: RABBITMQ_DEFAULT_PASS
+          valueFrom:
+            secretKeyRef:
+              name: rabbit-secrets
+              key: RABBITMQ_DEFAULT_PASS
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/rabbitmq
+      hostname: rabbitmq
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
+      nodeSelector:
+        topology.kubernetes.io/zone: __AVAILABILITY_ZONE_A__
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: rabbit-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+  namespace: fcg-platform
+  labels:
+    app.kubernetes.io/part-of: fcg
+spec:
+  type: ClusterIP
+  selector:
+    app: rabbitmq
+  ports:
+  - name: tcp
+    port: 5672
+    targetPort: 5672
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: fcg-platform
+  labels:
+    app.kubernetes.io/part-of: fcg
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+        app.kubernetes.io/part-of: fcg
+    spec:
+      serviceAccountName: redis
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 45
+      containers:
+      - name: redis
+        image: redis:7.4-alpine
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: tcp
+          containerPort: 6379
+        resources:
+          requests:
+            cpu: 100m
+            memory: 64Mi
+          limits:
+            cpu: '1'
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+        startupProbe:
+          tcpSocket:
+            port: 6379
+          failureThreshold: 60
+          periodSeconds: 5
+          timeoutSeconds: 3
+        readinessProbe:
+          tcpSocket:
+            port: 6379
+          periodSeconds: 5
+          timeoutSeconds: 3
+        livenessProbe:
+          tcpSocket:
+            port: 6379
+          periodSeconds: 10
+          timeoutSeconds: 3
+        args:
+        - --save
+        - ''
+        - --appendonly
+        - 'no'
+        - --maxmemory
+        - 64mb
+        - --maxmemory-policy
+        - allkeys-lru
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: fcg-platform
+  labels:
+    app.kubernetes.io/part-of: fcg
+spec:
+  type: ClusterIP
+  selector:
+    app: redis
+  ports:
+  - name: tcp
+    port: 6379
+    targetPort: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payments-api
+  namespace: fcg-platform
+  labels:
+    app.kubernetes.io/part-of: fcg
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: payments-api
+  template:
+    metadata:
+      labels:
+        app: payments-api
+        app.kubernetes.io/part-of: fcg
+    spec:
+      serviceAccountName: payments-api
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 45
+      containers:
+      - name: payments-api
+        image: __PAYMENTS_IMAGE__
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: tcp
+          containerPort: 8080
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: '1'
+            memory: 512Mi
+        securityContext:
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          periodSeconds: 5
+          failureThreshold: 60
+          timeoutSeconds: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          periodSeconds: 5
+          timeoutSeconds: 3
+        livenessProbe:
+          tcpSocket:
+            port: 8080
+          periodSeconds: 10
+          timeoutSeconds: 3
+        env:
+        - name: ASPNETCORE_ENVIRONMENT
+          value: Production
+        envFrom:
+        - configMapRef:
+            name: payments-api-config
+        - secretRef:
+            name: payments-api-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payments-api
+  namespace: fcg-platform
+  labels:
+    app.kubernetes.io/part-of: fcg
+spec:
+  type: ClusterIP
+  selector:
+    app: payments-api
+  ports:
+  - name: tcp
+    port: 8080
+    targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kong
+  namespace: fcg-platform
+  labels:
+    app.kubernetes.io/part-of: fcg
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: kong
+  template:
+    metadata:
+      labels:
+        app: kong
+        app.kubernetes.io/part-of: fcg
+    spec:
+      serviceAccountName: kong
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 45
+      containers:
+      - name: kong
+        image: kong:3.9.3
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: proxy
+          containerPort: 8000
+        - name: status
+          containerPort: 8100
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: '1'
+            memory: 512Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+        startupProbe:
+          httpGet:
+            path: /status
+            port: status
+          failureThreshold: 60
+          periodSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /status/ready
+            port: status
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /status
+            port: status
+          periodSeconds: 10
+        env:
+        - name: KONG_DATABASE
+          value: 'off'
+        - name: KONG_DECLARATIVE_CONFIG
+          value: /etc/kong/declarative/kong.json
+        - name: KONG_PROXY_LISTEN
+          value: 0.0.0.0:8000
+        - name: KONG_ADMIN_LISTEN
+          value: 'off'
+        - name: KONG_STATUS_LISTEN
+          value: 0.0.0.0:8100
+        - name: KONG_NGINX_WORKER_PROCESSES
+          value: '2'
+        - name: KONG_PLUGINS
+          value: jwt
+        - name: KONG_PROXY_ACCESS_LOG
+          value: 'off'
+        - name: KONG_PROXY_ERROR_LOG
+          value: /dev/stderr
+        - name: KONG_DNS_VALID_TTL
+          value: '5'
+        - name: KONG_DNS_ERROR_TTL
+          value: '1'
+        - name: KONG_DNS_NOT_FOUND_TTL
+          value: '0'
+        volumeMounts:
+        - name: config
+          mountPath: /etc/kong/declarative
+          readOnly: true
+      volumes:
+      - name: config
+        secret:
+          secretName: fcg-kong-config
+          items:
+          - key: kong.json
+            path: kong.json
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kong
+  namespace: fcg-platform
+  labels:
+    app.kubernetes.io/part-of: fcg
+spec:
+  type: NodePort
+  selector:
+    app: kong
+  ports:
+  - name: proxy
+    port: 8000
+    targetPort: proxy
+    nodePort: 30080
+  externalTrafficPolicy: Local

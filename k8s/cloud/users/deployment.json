@@ -1,0 +1,131 @@
+{
+  "apiVersion": "apps/v1",
+  "kind": "Deployment",
+  "metadata": {
+    "name": "users-api",
+    "labels": {
+      "app": "users-api",
+      "app.kubernetes.io/name": "users-api",
+      "app.kubernetes.io/part-of": "fcg"
+    }
+  },
+  "spec": {
+    "replicas": 2,
+    "minReadySeconds": 5,
+    "progressDeadlineSeconds": 300,
+    "revisionHistoryLimit": 3,
+    "selector": {
+      "matchLabels": {
+        "app": "users-api"
+      }
+    },
+    "strategy": {
+      "type": "RollingUpdate",
+      "rollingUpdate": {
+        "maxUnavailable": 0,
+        "maxSurge": 1
+      }
+    },
+    "template": {
+      "metadata": {
+        "labels": {
+          "app": "users-api",
+          "app.kubernetes.io/name": "users-api",
+          "app.kubernetes.io/part-of": "fcg"
+        }
+      },
+      "spec": {
+        "serviceAccountName": "users-api",
+        "automountServiceAccountToken": false,
+        "terminationGracePeriodSeconds": 45,
+        "containers": [
+          {
+            "name": "users-api",
+            "image": "replace.invalid/fcg@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+            "imagePullPolicy": "IfNotPresent",
+            "ports": [
+              {
+                "name": "http",
+                "containerPort": 8080
+              }
+            ],
+            "env": [
+              {
+                "name": "ASPNETCORE_ENVIRONMENT",
+                "value": "Production"
+              }
+            ],
+            "envFrom": [
+              {
+                "configMapRef": {
+                  "name": "users-api-config"
+                }
+              },
+              {
+                "secretRef": {
+                  "name": "users-api-secrets"
+                }
+              }
+            ],
+            "resources": {
+              "requests": {
+                "cpu": "100m",
+                "memory": "128Mi"
+              },
+              "limits": {
+                "cpu": "1",
+                "memory": "512Mi"
+              }
+            },
+            "securityContext": {
+              "runAsNonRoot": true,
+              "allowPrivilegeEscalation": false,
+              "capabilities": {
+                "drop": [
+                  "ALL"
+                ]
+              },
+              "seccompProfile": {
+                "type": "RuntimeDefault"
+              }
+            },
+            "startupProbe": {
+              "httpGet": {
+                "path": "/health/live",
+                "port": "http"
+              },
+              "periodSeconds": 2,
+              "timeoutSeconds": 3,
+              "failureThreshold": 60
+            },
+            "readinessProbe": {
+              "httpGet": {
+                "path": "/health",
+                "port": "http"
+              },
+              "periodSeconds": 3,
+              "timeoutSeconds": 3,
+              "failureThreshold": 3
+            },
+            "livenessProbe": {
+              "httpGet": {
+                "path": "/health/live",
+                "port": "http"
+              },
+              "periodSeconds": 10,
+              "timeoutSeconds": 3,
+              "failureThreshold": 3
+            },
+            "lifecycle": {
+              "preStop": {
+                "sleep": {
+                  "seconds": 5
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

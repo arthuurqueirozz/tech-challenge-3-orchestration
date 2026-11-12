@@ -1,0 +1,223 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "FIAP Fase 4 retained private OpenSearch foundation. Bootstrap access only; runtime identity, index mapping and dynamic cluster settings are separate steps.",
+  "Metadata": {
+    "Retention": "Deletion/replacement retains both the billable domain and its security group. Export and explicitly retire the domain/security group before deleting the network-compute stack.",
+    "Preconditions": "The OpenSearch service-linked role must already exist or the provisioner must be authorized for AWS automatic creation. No service-linked role resource is unconditionally created."
+  },
+  "Parameters": {
+    "VpcId": {
+      "Type": "AWS::EC2::VPC::Id"
+    },
+    "PublicSubnetAId": {
+      "Type": "AWS::EC2::Subnet::Id",
+      "Description": "Primary-AZ subnet from network-compute. Verify its VPC and AZ through AWS before provisioning."
+    },
+    "ClusterSecurityGroupId": {
+      "Type": "AWS::EC2::SecurityGroup::Id",
+      "Description": "EKS-managed cluster/node security group from network-compute in the same VPC."
+    },
+    "DomainName": {
+      "Type": "String",
+      "MinLength": 3,
+      "MaxLength": 28,
+      "AllowedPattern": "^[a-z][a-z0-9-]*$",
+      "ConstraintDescription": "Use a lowercase domain name beginning with a letter."
+    },
+    "IndexName": {
+      "Type": "String",
+      "MinLength": 1,
+      "MaxLength": 128,
+      "AllowedPattern": "^[a-z0-9][a-z0-9_-]*$",
+      "ConstraintDescription": "Use a lowercase application index identifier with letters, numbers, hyphens or underscores."
+    },
+    "BootstrapRoleArn": {
+      "Type": "String",
+      "AllowedPattern": "^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$",
+      "ConstraintDescription": "Provide an existing IAM role ARN in this account; not an STS assumed-role ARN.",
+      "Description": "Existing same-account IAM bootstrap role. No runtime/Catalog identity is created by this template."
+    },
+    "CatalogRuntimeRoleArn": {
+      "Type": "String",
+      "AllowedPattern": "^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$",
+      "Description": "Index-scoped runtime role created by runtime-identity, before this domain."
+    }
+  },
+  "Rules": {
+    "OhioOnly": {
+      "Assertions": [
+        {
+          "Assert": {
+            "Fn::Equals": [
+              {
+                "Ref": "AWS::Region"
+              },
+              "us-east-2"
+            ]
+          },
+          "AssertDescription": "Deploy only in the verified Ohio region us-east-2."
+        }
+      ]
+    }
+  },
+  "Resources": {
+    "DomainSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Metadata": {
+        "Retention": "Retained together with the domain to preserve its ENI dependency. Retired explicitly after the domain and before the foundation VPC."
+      },
+      "Properties": {
+        "GroupDescription": "Private OpenSearch HTTPS only from the EKS-managed cluster/node security group.",
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 443,
+            "ToPort": 443,
+            "SourceSecurityGroupId": {
+              "Ref": "ClusterSecurityGroupId"
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${DomainName}-private-search"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    },
+    "SearchDomain": {
+      "Type": "AWS::OpenSearchService::Domain",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "DomainName": {
+          "Ref": "DomainName"
+        },
+        "EngineVersion": "OpenSearch_2.19",
+        "ClusterConfig": {
+          "InstanceType": "t3.small.search",
+          "InstanceCount": 1,
+          "DedicatedMasterEnabled": false,
+          "ZoneAwarenessEnabled": false,
+          "MultiAZWithStandbyEnabled": false,
+          "WarmEnabled": false
+        },
+        "EBSOptions": {
+          "EBSEnabled": true,
+          "VolumeType": "gp3",
+          "VolumeSize": 10
+        },
+        "EncryptionAtRestOptions": {
+          "Enabled": true
+        },
+        "NodeToNodeEncryptionOptions": {
+          "Enabled": true
+        },
+        "DomainEndpointOptions": {
+          "EnforceHTTPS": true,
+          "TLSSecurityPolicy": "Policy-Min-TLS-1-2-2019-07"
+        },
+        "VPCOptions": {
+          "SubnetIds": [
+            {
+              "Ref": "PublicSubnetAId"
+            }
+          ],
+          "SecurityGroupIds": [
+            {
+              "Ref": "DomainSecurityGroup"
+            }
+          ]
+        },
+        "AccessPolicies": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "DedicatedDomainBootstrap",
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Ref": "BootstrapRoleArn"
+                }
+              },
+              "Action": [
+                "es:ESHttpGet",
+                "es:ESHttpHead",
+                "es:ESHttpPut",
+                "es:ESHttpPost"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:es:${AWS::Region}:${AWS::AccountId}:domain/${DomainName}/*"
+              }
+            },
+            {
+              "Sid": "CatalogIndexOnly",
+              "Effect": "Allow",
+              "Principal": { "AWS": { "Ref": "CatalogRuntimeRoleArn" } },
+              "Action": ["es:ESHttpGet", "es:ESHttpHead", "es:ESHttpPut", "es:ESHttpPost"],
+              "Resource": [
+                { "Fn::Sub": "arn:${AWS::Partition}:es:${AWS::Region}:${AWS::AccountId}:domain/${DomainName}/${IndexName}" },
+                { "Fn::Sub": "arn:${AWS::Partition}:es:${AWS::Region}:${AWS::AccountId}:domain/${DomainName}/${IndexName}/*" }
+              ]
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Ref": "DomainName"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "DomainName": {
+      "Value": {
+        "Ref": "SearchDomain"
+      }
+    },
+    "DomainArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "SearchDomain",
+          "Arn"
+        ]
+      }
+    },
+    "DomainEndpoint": {
+      "Value": {
+        "Fn::Sub": "https://${SearchDomain.DomainEndpoint}"
+      }
+    },
+    "DomainSecurityGroupId": {
+      "Value": {
+        "Ref": "DomainSecurityGroup"
+      }
+    },
+    "IndexName": {
+      "Value": {
+        "Ref": "IndexName"
+      }
+    }
+  }
+}
+

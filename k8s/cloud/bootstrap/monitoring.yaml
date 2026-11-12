@@ -1,0 +1,670 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: users-api-metrics
+  namespace: fcg-users
+  labels:
+    app.kubernetes.io/part-of: fcg
+spec:
+  type: ClusterIP
+  selector:
+    app: users-api
+  ports:
+  - name: tcp
+    port: 8080
+    targetPort: 8080
+  clusterIP: None
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: catalog-api-metrics
+  namespace: fcg-catalog
+  labels:
+    app.kubernetes.io/part-of: fcg
+spec:
+  type: ClusterIP
+  selector:
+    app: catalog-api
+  ports:
+  - name: tcp
+    port: 8080
+    targetPort: 8080
+  clusterIP: None
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: fcg-platform
+  labels:
+    app.kubernetes.io/part-of: fcg
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 5s
+      evaluation_interval: 5s
+    scrape_configs:
+    - job_name: users-api
+      metrics_path: /metrics
+      dns_sd_configs:
+      - names:
+        - users-api-metrics.fcg-users.svc.cluster.local
+        type: A
+        port: 8080
+        refresh_interval: 5s
+    - job_name: catalog-api
+      metrics_path: /metrics
+      dns_sd_configs:
+      - names:
+        - catalog-api-metrics.fcg-catalog.svc.cluster.local
+        type: A
+        port: 8080
+        refresh_interval: 5s
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: fcg-platform
+  labels:
+    app.kubernetes.io/part-of: fcg
+data:
+  datasource.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: FCG Prometheus
+        uid: fcg-prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus.fcg-platform.svc.cluster.local:9090
+        isDefault: true
+        editable: false
+        jsonData:
+          timeInterval: 5s
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-providers
+  namespace: fcg-platform
+  labels:
+    app.kubernetes.io/part-of: fcg
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: FCG
+        orgId: 1
+        folder: FCG
+        type: file
+        disableDeletion: false
+        editable: false
+        updateIntervalSeconds: 10
+        options:
+          path: /var/lib/grafana/dashboards
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard
+  namespace: fcg-platform
+  labels:
+    app.kubernetes.io/part-of: fcg
+data:
+  fcg-http.json: |
+    {
+      "uid": "fcg-http",
+      "title": "FCG • APIs em operação",
+      "description": "UsersAPI e CatalogAPI — tráfego HTTP de negócio (/api). Health e scraping excluídos. Contadores reiniciam com o processo; taxas e p95 usam janela de 2 minutos.",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "5s",
+      "timezone": "browser",
+      "time": {
+        "from": "now-15m",
+        "to": "now"
+      },
+      "tags": [
+        "fiap",
+        "fase3"
+      ],
+      "editable": false,
+      "templating": {
+        "list": [
+          {
+            "name": "service",
+            "label": "Serviço",
+            "type": "custom",
+            "query": "users-api,catalog-api",
+            "includeAll": true,
+            "allValue": ".*",
+            "multi": true,
+            "current": {
+              "text": "All",
+              "value": "$__all"
+            },
+            "options": [
+              {
+                "text": "All",
+                "value": "$__all",
+                "selected": true
+              },
+              {
+                "text": "users-api",
+                "value": "users-api"
+              },
+              {
+                "text": "catalog-api",
+                "value": "catalog-api"
+              }
+            ]
+          }
+        ]
+      },
+      "panels": [
+        {
+          "id": 1,
+          "title": "Requisições desde o início do processo",
+          "type": "stat",
+          "gridPos": {
+            "x": 0,
+            "y": 0,
+            "w": 12,
+            "h": 9
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fcg-prometheus"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (job) (fcg_http_requests_total{job=~\"$service\"})",
+              "legendFormat": "{{job}}",
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "min": 0,
+              "color": {
+                "mode": "palette-classic"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "multi"
+            },
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            }
+          }
+        },
+        {
+          "id": 2,
+          "title": "Requisições por status HTTP",
+          "type": "timeseries",
+          "gridPos": {
+            "x": 12,
+            "y": 0,
+            "w": 12,
+            "h": 9
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fcg-prometheus"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (job,status_code) (fcg_http_requests_total{job=~\"$service\"})",
+              "legendFormat": "{{job}} · {{status_code}}",
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "min": 0,
+              "color": {
+                "mode": "palette-classic"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "multi"
+            },
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            }
+          }
+        },
+        {
+          "id": 3,
+          "title": "Latência p95 por rota",
+          "type": "timeseries",
+          "gridPos": {
+            "x": 0,
+            "y": 9,
+            "w": 12,
+            "h": 9
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fcg-prometheus"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "histogram_quantile(0.95, sum by (job,route,le) (rate(fcg_http_request_duration_seconds_bucket{job=~\"$service\"}[2m])))",
+              "legendFormat": "{{job}} · {{route}}",
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "min": 0,
+              "color": {
+                "mode": "palette-classic"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "multi"
+            },
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            }
+          }
+        },
+        {
+          "id": 4,
+          "title": "Taxa de requisições",
+          "type": "timeseries",
+          "gridPos": {
+            "x": 12,
+            "y": 9,
+            "w": 12,
+            "h": 9
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fcg-prometheus"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (job) (rate(fcg_http_requests_total{job=~\"$service\"}[2m]))",
+              "legendFormat": "{{job}}",
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "min": 0,
+              "color": {
+                "mode": "palette-classic"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "multi"
+            },
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            }
+          }
+        },
+        {
+          "id": 5,
+          "title": "Erros de servidor (5xx)",
+          "type": "timeseries",
+          "gridPos": {
+            "x": 0,
+            "y": 18,
+            "w": 12,
+            "h": 9
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fcg-prometheus"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "100 * ((sum by (job) (rate(fcg_http_requests_total{job=~\"$service\",status_code=~\"5..\"}[2m])) or on(job) (0 * sum by (job) (rate(fcg_http_requests_total{job=~\"$service\"}[2m])))) / clamp_min(sum by (job) (rate(fcg_http_requests_total{job=~\"$service\"}[2m])), 0.000001))",
+              "legendFormat": "{{job}}",
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "color": {
+                "mode": "palette-classic"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "multi"
+            },
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            }
+          }
+        },
+        {
+          "id": 6,
+          "title": "Erros de cliente (4xx)",
+          "type": "timeseries",
+          "gridPos": {
+            "x": 12,
+            "y": 18,
+            "w": 12,
+            "h": 9
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fcg-prometheus"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "100 * ((sum by (job) (rate(fcg_http_requests_total{job=~\"$service\",status_code=~\"4..\"}[2m])) or on(job) (0 * sum by (job) (rate(fcg_http_requests_total{job=~\"$service\"}[2m])))) / clamp_min(sum by (job) (rate(fcg_http_requests_total{job=~\"$service\"}[2m])), 0.000001))",
+              "legendFormat": "{{job}}",
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "color": {
+                "mode": "palette-classic"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "multi"
+            },
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            }
+          }
+        }
+      ]
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: fcg-platform
+  labels:
+    app.kubernetes.io/part-of: fcg
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      securityContext:
+        fsGroup: 65534
+        runAsUser: 65534
+        runAsGroup: 65534
+        runAsNonRoot: true
+      containers:
+      - name: prometheus
+        image: prom/prometheus:v3.14.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 9090
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: '2'
+            memory: 512Mi
+        args:
+        - --config.file=/etc/prometheus/prometheus.yml
+        - --storage.tsdb.path=/prometheus
+        - --storage.tsdb.retention.time=24h
+        - --storage.tsdb.retention.size=256MB
+        volumeMounts:
+        - name: config
+          mountPath: /etc/prometheus
+        - name: data
+          mountPath: /prometheus
+        readinessProbe:
+          tcpSocket:
+            port: 9090
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          tcpSocket:
+            port: 9090
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        startupProbe:
+          tcpSocket:
+            port: 9090
+          failureThreshold: 60
+          periodSeconds: 5
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+      volumes:
+      - name: config
+        configMap:
+          name: prometheus-config
+      - name: data
+        emptyDir:
+          sizeLimit: 512Mi
+      serviceAccountName: prometheus
+      automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: fcg-platform
+  labels:
+    app.kubernetes.io/part-of: fcg
+spec:
+  type: ClusterIP
+  selector:
+    app: prometheus
+  ports:
+  - name: http
+    port: 9090
+    targetPort: 9090
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: fcg-platform
+  labels:
+    app.kubernetes.io/part-of: fcg
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      securityContext:
+        fsGroup: 472
+        runAsUser: 472
+        runAsGroup: 472
+        runAsNonRoot: true
+      containers:
+      - name: grafana
+        image: grafana/grafana:13.2.1
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3000
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: '2'
+            memory: 1Gi
+        env:
+        - name: GF_USERS_ALLOW_SIGN_UP
+          value: 'false'
+        - name: GF_ANALYTICS_REPORTING_ENABLED
+          value: 'false'
+        - name: GF_ANALYTICS_CHECK_FOR_UPDATES
+          value: 'false'
+        - name: GF_AUTH_ANONYMOUS_ENABLED
+          value: 'false'
+        - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+          value: Viewer
+        envFrom:
+        - secretRef:
+            name: grafana-secrets
+        volumeMounts:
+        - name: datasources
+          mountPath: /etc/grafana/provisioning/datasources
+        - name: providers
+          mountPath: /etc/grafana/provisioning/dashboards
+        - name: dashboard
+          mountPath: /var/lib/grafana/dashboards
+        - name: data
+          mountPath: /var/lib/grafana
+        readinessProbe:
+          tcpSocket:
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          tcpSocket:
+            port: 3000
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        startupProbe:
+          tcpSocket:
+            port: 3000
+          failureThreshold: 60
+          periodSeconds: 5
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+      volumes:
+      - name: datasources
+        configMap:
+          name: grafana-datasources
+      - name: providers
+        configMap:
+          name: grafana-providers
+      - name: dashboard
+        configMap:
+          name: grafana-dashboard
+      - name: data
+        emptyDir:
+          sizeLimit: 2Gi
+      serviceAccountName: grafana
+      automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: fcg-platform
+  labels:
+    app.kubernetes.io/part-of: fcg
+spec:
+  type: ClusterIP
+  selector:
+    app: grafana
+  ports:
+  - name: http
+    port: 3000
+    targetPort: 3000

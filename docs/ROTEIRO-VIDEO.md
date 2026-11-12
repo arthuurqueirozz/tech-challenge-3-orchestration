@@ -1,5 +1,7 @@
 # Roteiro do vídeo — até 20 minutos
 
+> Histórico da Fase 3. Para a Fase 4, siga [CLOUD-OPERACAO.md](CLOUD-OPERACAO.md), com EKS/OpenSearch gerenciados, CI/CD real e limite normativo de 25 minutos. Não usar este roteiro antigo como checklist final.
+
 Planejamento de gravação, não comprovação de vídeo entregue. Reserve 18 minutos
 e confira a duração final antes de publicar. Não mostre arquivos `*.local.*`,
 JWTs completos, senhas, Secrets Kubernetes nem a configuração da AWS CLI.
