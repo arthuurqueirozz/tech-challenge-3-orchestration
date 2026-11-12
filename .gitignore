@@ -2,6 +2,7 @@
 .env.*
 !.env.example
 *.local.*
+!compose.search.local.yaml
 *.log
 *.zip
 .aws/

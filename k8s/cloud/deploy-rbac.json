@@ -1,0 +1,206 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "kind": "Role",
+      "metadata": {
+        "name": "users-deploy",
+        "namespace": "fcg-users"
+      },
+      "rules": [
+        {
+          "apiGroups": [
+            "apps"
+          ],
+          "resources": [
+            "deployments"
+          ],
+          "verbs": [
+            "get",
+            "list",
+            "watch",
+            "create",
+            "patch",
+            "update"
+          ]
+        },
+        {
+          "apiGroups": [
+            ""
+          ],
+          "resources": [
+            "services"
+          ],
+          "verbs": [
+            "get",
+            "create",
+            "patch",
+            "update"
+          ]
+        },
+        {
+          "apiGroups": [
+            "batch"
+          ],
+          "resources": [
+            "jobs"
+          ],
+          "verbs": [
+            "get",
+            "list",
+            "watch",
+            "create"
+          ]
+        },
+        {
+          "apiGroups": [
+            ""
+          ],
+          "resources": [
+            "pods"
+          ],
+          "verbs": [
+            "get",
+            "list",
+            "watch"
+          ]
+        },
+        {
+          "apiGroups": [
+            "apps"
+          ],
+          "resources": [
+            "replicasets"
+          ],
+          "verbs": [
+            "get",
+            "list",
+            "watch"
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "kind": "RoleBinding",
+      "metadata": {
+        "name": "users-deploy",
+        "namespace": "fcg-users"
+      },
+      "roleRef": {
+        "apiGroup": "rbac.authorization.k8s.io",
+        "kind": "Role",
+        "name": "users-deploy"
+      },
+      "subjects": [
+        {
+          "apiGroup": "rbac.authorization.k8s.io",
+          "kind": "Group",
+          "name": "fcg:users-deploy"
+        }
+      ]
+    },
+    {
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "kind": "Role",
+      "metadata": {
+        "name": "catalog-deploy",
+        "namespace": "fcg-catalog"
+      },
+      "rules": [
+        {
+          "apiGroups": [
+            "apps"
+          ],
+          "resources": [
+            "deployments"
+          ],
+          "verbs": [
+            "get",
+            "list",
+            "watch",
+            "create",
+            "patch",
+            "update"
+          ]
+        },
+        {
+          "apiGroups": [
+            ""
+          ],
+          "resources": [
+            "services"
+          ],
+          "verbs": [
+            "get",
+            "create",
+            "patch",
+            "update"
+          ]
+        },
+        {
+          "apiGroups": [
+            "batch"
+          ],
+          "resources": [
+            "jobs"
+          ],
+          "verbs": [
+            "get",
+            "list",
+            "watch",
+            "create"
+          ]
+        },
+        {
+          "apiGroups": [
+            ""
+          ],
+          "resources": [
+            "pods"
+          ],
+          "verbs": [
+            "get",
+            "list",
+            "watch"
+          ]
+        },
+        {
+          "apiGroups": [
+            "apps"
+          ],
+          "resources": [
+            "replicasets"
+          ],
+          "verbs": [
+            "get",
+            "list",
+            "watch"
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "kind": "RoleBinding",
+      "metadata": {
+        "name": "catalog-deploy",
+        "namespace": "fcg-catalog"
+      },
+      "roleRef": {
+        "apiGroup": "rbac.authorization.k8s.io",
+        "kind": "Role",
+        "name": "catalog-deploy"
+      },
+      "subjects": [
+        {
+          "apiGroup": "rbac.authorization.k8s.io",
+          "kind": "Group",
+          "name": "fcg:catalog-deploy"
+        }
+      ]
+    }
+  ]
+}

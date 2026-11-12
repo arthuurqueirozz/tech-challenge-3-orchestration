@@ -1,6 +1,20 @@
-# FIAP Cloud Games — Fase 3
+# FIAP Cloud Games — Fase 4
 
-Guia central da stack .NET 8: identidade, catálogo, compras e notificações
+## Operação e apresentação da Fase 4
+
+O guia central é [CLOUD-OPERACAO.md](docs/CLOUD-OPERACAO.md): importação dos cinco repositórios, matriz integral do PDF, configuração privada, sequência AWS, CI/CD, ensaio, roteiro do vídeo e recuperação/encerramento. Leia o status real e os SHAs antes de executar. A criação está autorizada somente de 13/11/2026 20h a 18/11/2026 20h BRT; até a validação real nessa janela, não declarar pronto para gravar.
+
+A infraestrutura usa CloudFormation/SAM, EKS/ECR, OpenSearch gerenciado e NLB com HTTPS. Acesso CI usa STS restrito e túnel SSM com CA/TLS preservados. Os templates e a preparação são verificáveis localmente; não são evidência de recursos cloud já criados. Detalhes de fundação e preços: [AWS-FOUNDATION.md](docs/AWS-FOUNDATION.md).
+
+O ambiente focado de busca da Fase 4 está em [SEARCH-LOCAL.md](docs/SEARCH-LOCAL.md): Catalog .NET 10, SQL, Redis, RabbitMQ, OpenSearch local e `/search` público pelo Kong. A preparação gera secrets locais fora do Git e o bootstrap é um comando administrativo separado. Essa stack não provisiona AWS nem substitui os requisitos de busca/Kubernetes gerenciados da entrega. As instruções históricas da Fase 3 abaixo permanecem para referência.
+
+Users e Catalog agora preparam o banco pelo comando administrativo `--migrate`, antes do startup web, conforme [MIGRATIONS.md](docs/MIGRATIONS.md). A readiness recusa bancos com migrations pendentes. O fluxo de Job → Rolling Update → smoke e a configuração dos workflows estão em [DEPLOY.md](docs/DEPLOY.md); provisão, permissões e execução cloud continuam pendentes. Os scripts históricos da Fase 3 ainda pressupõem migrations no startup; não devem ser usados como deploy da Fase 4 sem adaptação.
+
+## Histórico da Fase 3
+
+O conteúdo abaixo documenta a antiga stack .NET 8/Kind. A Fase 4 usa .NET 10 e o guia acima; não executar os scripts históricos contra a AWS atual.
+
+Guia histórico da stack .NET 8: identidade, catálogo, compras e notificações
 simuladas, com Kong, Redis, Prometheus/Grafana e AWS Lambda/SQS/DynamoDB.
 A referência normativa é o PDF local `TC NETT - Fase 3.pdf`, páginas 3 a 7.
 O PDF original não é publicado neste repositório.

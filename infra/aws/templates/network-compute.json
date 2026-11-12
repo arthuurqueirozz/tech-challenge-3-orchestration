@@ -1,0 +1,819 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "FIAP Fase 4 foundation: Ohio VPC, restricted EKS control plane, one managed node and three retained private image repositories. No application deployment.",
+  "Metadata": {
+    "Purpose": "Prepare only after Free plan, permissions, current credit coverage and approved use window are verified. Retained repositories continue to incur storage charges.",
+    "FutureDependencies": "Pod Identity/CSI/addons, runtime IAM, persistent workload volumes, SAM and gateway/TLS are separate increments."
+  },
+  "Parameters": {
+    "ProjectName": {
+      "Type": "String",
+      "MinLength": 3,
+      "MaxLength": 20,
+      "AllowedPattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+      "ConstraintDescription": "Use a lowercase project identifier of 3-20 letters, numbers or hyphens."
+    },
+    "AdminRoleArn": {
+      "Type": "String",
+      "AllowedPattern": "^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$",
+      "ConstraintDescription": "Provide an existing IAM role ARN in this account; not an STS assumed-role ARN.",
+      "Description": "Existing administrator IAM role for explicit EKS AccessEntry; preflight verifies same account and caller access."
+    },
+    "AdminCidrIPv4": {
+      "Type": "String",
+      "AllowedPattern": "^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])/32$",
+      "ConstraintDescription": "Supply the operator public IPv4 as a single-host /32. A public 0.0.0.0/0 endpoint is not supported."
+    },
+    "AvailabilityZoneA": {
+      "Type": "String",
+      "AllowedValues": [
+        "us-east-2a",
+        "us-east-2b",
+        "us-east-2c"
+      ],
+      "Description": "Primary Ohio AZ: the only managed node and the search domain use this AZ."
+    },
+    "AvailabilityZoneB": {
+      "Type": "String",
+      "AllowedValues": [
+        "us-east-2a",
+        "us-east-2b",
+        "us-east-2c"
+      ],
+      "Description": "A different Ohio AZ required for the EKS control-plane subnet configuration."
+    }
+  },
+  "Rules": {
+    "OhioOnly": {
+      "Assertions": [
+        {
+          "Assert": {
+            "Fn::Equals": [
+              {
+                "Ref": "AWS::Region"
+              },
+              "us-east-2"
+            ]
+          },
+          "AssertDescription": "Deploy only in the verified Ohio region us-east-2."
+        }
+      ]
+    },
+    "DistinctAvailabilityZones": {
+      "Assertions": [
+        {
+          "Assert": {
+            "Fn::Not": [
+              {
+                "Fn::Equals": [
+                  {
+                    "Ref": "AvailabilityZoneA"
+                  },
+                  {
+                    "Ref": "AvailabilityZoneB"
+                  }
+                ]
+              }
+            ]
+          },
+          "AssertDescription": "AvailabilityZoneA and AvailabilityZoneB must be different."
+        }
+      ]
+    }
+  },
+  "Resources": {
+    "Vpc": {
+      "Type": "AWS::EC2::VPC",
+      "Properties": {
+        "CidrBlock": "10.44.0.0/16",
+        "EnableDnsSupport": true,
+        "EnableDnsHostnames": true,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${ProjectName}-vpc"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    },
+    "InternetGateway": {
+      "Type": "AWS::EC2::InternetGateway",
+      "Properties": {
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${ProjectName}-igw"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    },
+    "InternetGatewayAttachment": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "Properties": {
+        "VpcId": {
+          "Ref": "Vpc"
+        },
+        "InternetGatewayId": {
+          "Ref": "InternetGateway"
+        }
+      }
+    },
+    "PublicSubnetA": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "Vpc"
+        },
+        "AvailabilityZone": {
+          "Ref": "AvailabilityZoneA"
+        },
+        "CidrBlock": "10.44.0.0/24",
+        "MapPublicIpOnLaunch": true,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${ProjectName}-public-a"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          },
+          {
+            "Key": "kubernetes.io/role/elb",
+            "Value": "1"
+          }
+        ]
+      }
+    },
+    "PublicSubnetB": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "Vpc"
+        },
+        "AvailabilityZone": {
+          "Ref": "AvailabilityZoneB"
+        },
+        "CidrBlock": "10.44.1.0/24",
+        "MapPublicIpOnLaunch": true,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${ProjectName}-public-b"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          },
+          {
+            "Key": "kubernetes.io/role/elb",
+            "Value": "1"
+          }
+        ]
+      }
+    },
+    "PublicRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Ref": "Vpc"
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${ProjectName}-public-routes"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    },
+    "PublicDefaultRoute": {
+      "Type": "AWS::EC2::Route",
+      "DependsOn": "InternetGatewayAttachment",
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "PublicRouteTable"
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": {
+          "Ref": "InternetGateway"
+        }
+      }
+    },
+    "PublicSubnetARouteAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "PublicSubnetA"
+        },
+        "RouteTableId": {
+          "Ref": "PublicRouteTable"
+        }
+      }
+    },
+    "PublicSubnetBRouteAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "PublicSubnetB"
+        },
+        "RouteTableId": {
+          "Ref": "PublicRouteTable"
+        }
+      }
+    },
+    "ClusterRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "eks.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/AmazonEKSClusterPolicy"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${ProjectName}-cluster-role"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    },
+    "NodeRole": {
+      "Type": "AWS::IAM::Role",
+      "Metadata": {
+        "CniBootstrap": "CNI uses the node role for initial bootstrap. Move CNI permissions to a dedicated identity in the addon/identity increment."
+      },
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ec2.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/AmazonEKSWorkerNodePolicy"
+          },
+          {
+            "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/AmazonEC2ContainerRegistryPullOnly"
+          },
+          {
+            "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/AmazonEKS_CNI_Policy"
+          },
+          {
+            "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${ProjectName}-node-role"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    },
+    "Cluster": {
+      "Type": "AWS::EKS::Cluster",
+      "Properties": {
+        "Name": {
+          "Fn::Sub": "${ProjectName}-eks"
+        },
+        "Version": "1.35",
+        "RoleArn": {
+          "Fn::GetAtt": [
+            "ClusterRole",
+            "Arn"
+          ]
+        },
+        "AccessConfig": {
+          "AuthenticationMode": "API",
+          "BootstrapClusterCreatorAdminPermissions": false
+        },
+        "ResourcesVpcConfig": {
+          "SubnetIds": [
+            {
+              "Ref": "PublicSubnetA"
+            },
+            {
+              "Ref": "PublicSubnetB"
+            }
+          ],
+          "EndpointPrivateAccess": true,
+          "EndpointPublicAccess": true,
+          "PublicAccessCidrs": [
+            {
+              "Ref": "AdminCidrIPv4"
+            }
+          ]
+        },
+        "KubernetesNetworkConfig": {
+          "IpFamily": "ipv4"
+        },
+        "UpgradePolicy": {
+          "SupportType": "STANDARD"
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${ProjectName}-eks"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    },
+    "AdministratorAccess": {
+      "Type": "AWS::EKS::AccessEntry",
+      "Properties": {
+        "ClusterName": {
+          "Ref": "Cluster"
+        },
+        "PrincipalArn": {
+          "Ref": "AdminRoleArn"
+        },
+        "Type": "STANDARD",
+        "AccessPolicies": [
+          {
+            "PolicyArn": {
+              "Fn::Sub": "arn:${AWS::Partition}:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+            },
+            "AccessScope": {
+              "Type": "cluster"
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${ProjectName}-administrator-access"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    },
+    "NodeLaunchTemplate": {
+      "Type": "AWS::EC2::LaunchTemplate",
+      "Properties": {
+        "LaunchTemplateName": {
+          "Fn::Sub": "${ProjectName}-node"
+        },
+        "LaunchTemplateData": {
+          "UserData": {
+            "Fn::Base64": "MIME-Version: 1.0\nContent-Type: multipart/mixed; boundary=\"FCGSSM\"\n\n--FCGSSM\nContent-Type: text/x-shellscript; charset=\"us-ascii\"\n\n#!/bin/bash\nset -euo pipefail\nif ! rpm -q amazon-ssm-agent >/dev/null 2>&1; then dnf install -y amazon-ssm-agent; fi\nsystemctl enable --now amazon-ssm-agent\n--FCGSSM--\n"
+          },
+          "BlockDeviceMappings": [
+            {
+              "DeviceName": "/dev/xvda",
+              "Ebs": {
+                "VolumeSize": 40,
+                "VolumeType": "gp3",
+                "Encrypted": true,
+                "DeleteOnTermination": true
+              }
+            }
+          ],
+          "MetadataOptions": {
+            "HttpEndpoint": "enabled",
+            "HttpTokens": "required",
+            "HttpPutResponseHopLimit": 1
+          }
+        },
+        "TagSpecifications": [
+          {
+            "ResourceType": "launch-template",
+            "Tags": [
+              {
+                "Key": "Project",
+                "Value": {
+                  "Ref": "ProjectName"
+                }
+              },
+              {
+                "Key": "Name",
+                "Value": {
+                  "Fn::Sub": "${ProjectName}-node-template"
+                }
+              },
+              {
+                "Key": "ManagedBy",
+                "Value": "CloudFormation"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "Nodegroup": {
+      "Type": "AWS::EKS::Nodegroup",
+      "DependsOn": [
+        "PublicDefaultRoute",
+        "PublicSubnetARouteAssociation",
+        "AdministratorAccess"
+      ],
+      "Properties": {
+        "ClusterName": {
+          "Ref": "Cluster"
+        },
+        "NodegroupName": {
+          "Fn::Sub": "${ProjectName}-primary"
+        },
+        "NodeRole": {
+          "Fn::GetAtt": [
+            "NodeRole",
+            "Arn"
+          ]
+        },
+        "Subnets": [
+          {
+            "Ref": "PublicSubnetA"
+          }
+        ],
+        "AmiType": "AL2023_x86_64_STANDARD",
+        "CapacityType": "ON_DEMAND",
+        "InstanceTypes": [
+          "m6a.xlarge"
+        ],
+        "LaunchTemplate": {
+          "Id": {
+            "Ref": "NodeLaunchTemplate"
+          },
+          "Version": {
+            "Fn::GetAtt": [
+              "NodeLaunchTemplate",
+              "LatestVersionNumber"
+            ]
+          }
+        },
+        "ScalingConfig": {
+          "MinSize": 1,
+          "DesiredSize": 1,
+          "MaxSize": 1
+        },
+        "UpdateConfig": {
+          "MaxUnavailable": 1
+        },
+        "Tags": {
+          "Project": {
+            "Ref": "ProjectName"
+          },
+          "ManagedBy": "CloudFormation"
+        }
+      }
+    },
+    "ArtifactBucket": {
+      "Type": "AWS::S3::Bucket",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "BucketEncryption": { "ServerSideEncryptionConfiguration": [ { "ServerSideEncryptionByDefault": { "SSEAlgorithm": "AES256" } } ] },
+        "OwnershipControls": { "Rules": [ { "ObjectOwnership": "BucketOwnerEnforced" } ] },
+        "PublicAccessBlockConfiguration": { "BlockPublicAcls": true, "BlockPublicPolicy": true, "IgnorePublicAcls": true, "RestrictPublicBuckets": true },
+        "Tags": [ { "Key": "Project", "Value": { "Ref": "ProjectName" } }, { "Key": "ManagedBy", "Value": "CloudFormation" } ]
+      }
+    },
+    "ArtifactBucketPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Properties": {
+        "Bucket": { "Ref": "ArtifactBucket" },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [ {
+            "Sid": "RequireTLS", "Effect": "Deny", "Principal": "*", "Action": "s3:*",
+            "Resource": [ { "Fn::GetAtt": [ "ArtifactBucket", "Arn" ] }, { "Fn::Sub": "${ArtifactBucket.Arn}/*" } ],
+            "Condition": { "Bool": { "aws:SecureTransport": "false" } }
+          } ]
+        }
+      }
+    },
+    "UsersRepository": {
+      "Type": "AWS::ECR::Repository",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Metadata": {
+        "Retention": "Deleting or replacing this stack retains the repository and its images; storage charges continue until an authorized explicit cleanup."
+      },
+      "Properties": {
+        "RepositoryName": {
+          "Fn::Sub": "${ProjectName}/users"
+        },
+        "ImageTagMutability": "IMMUTABLE",
+        "ImageScanningConfiguration": {
+          "ScanOnPush": true
+        },
+        "EncryptionConfiguration": {
+          "EncryptionType": "AES256"
+        },
+        "EmptyOnDelete": false,
+        "LifecyclePolicy": {
+          "LifecyclePolicyText": "{\"rules\":[{\"rulePriority\":1,\"description\":\"Expire only untagged images older than 14 days; retain tagged deploy/rollback images.\",\"selection\":{\"tagStatus\":\"untagged\",\"countType\":\"sinceImagePushed\",\"countUnit\":\"days\",\"countNumber\":14},\"action\":{\"type\":\"expire\"}}]}"
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${ProjectName}-users-images"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    },
+    "CatalogRepository": {
+      "Type": "AWS::ECR::Repository",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Metadata": {
+        "Retention": "Deleting or replacing this stack retains the repository and its images; storage charges continue until an authorized explicit cleanup."
+      },
+      "Properties": {
+        "RepositoryName": {
+          "Fn::Sub": "${ProjectName}/catalog"
+        },
+        "ImageTagMutability": "IMMUTABLE",
+        "ImageScanningConfiguration": {
+          "ScanOnPush": true
+        },
+        "EncryptionConfiguration": {
+          "EncryptionType": "AES256"
+        },
+        "EmptyOnDelete": false,
+        "LifecyclePolicy": {
+          "LifecyclePolicyText": "{\"rules\":[{\"rulePriority\":1,\"description\":\"Expire only untagged images older than 14 days; retain tagged deploy/rollback images.\",\"selection\":{\"tagStatus\":\"untagged\",\"countType\":\"sinceImagePushed\",\"countUnit\":\"days\",\"countNumber\":14},\"action\":{\"type\":\"expire\"}}]}"
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${ProjectName}-catalog-images"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    },
+    "PaymentsRepository": {
+      "Type": "AWS::ECR::Repository",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Metadata": {
+        "Retention": "Deleting or replacing this stack retains the repository and its images; storage charges continue until an authorized explicit cleanup."
+      },
+      "Properties": {
+        "RepositoryName": {
+          "Fn::Sub": "${ProjectName}/payments"
+        },
+        "ImageTagMutability": "IMMUTABLE",
+        "ImageScanningConfiguration": {
+          "ScanOnPush": true
+        },
+        "EncryptionConfiguration": {
+          "EncryptionType": "AES256"
+        },
+        "EmptyOnDelete": false,
+        "LifecyclePolicy": {
+          "LifecyclePolicyText": "{\"rules\":[{\"rulePriority\":1,\"description\":\"Expire only untagged images older than 14 days; retain tagged deploy/rollback images.\",\"selection\":{\"tagStatus\":\"untagged\",\"countType\":\"sinceImagePushed\",\"countUnit\":\"days\",\"countNumber\":14},\"action\":{\"type\":\"expire\"}}]}"
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${ProjectName}-payments-images"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "ArtifactBucketName": { "Value": { "Ref": "ArtifactBucket" } },
+    "VpcId": {
+      "Value": {
+        "Ref": "Vpc"
+      }
+    },
+    "PublicSubnetAId": {
+      "Value": {
+        "Ref": "PublicSubnetA"
+      }
+    },
+    "PublicSubnetBId": {
+      "Value": {
+        "Ref": "PublicSubnetB"
+      }
+    },
+    "AvailabilityZoneA": {
+      "Value": {
+        "Ref": "AvailabilityZoneA"
+      }
+    },
+    "ClusterName": {
+      "Value": {
+        "Ref": "Cluster"
+      }
+    },
+    "ClusterArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "Cluster",
+          "Arn"
+        ]
+      }
+    },
+    "ClusterEndpoint": {
+      "Value": {
+        "Fn::GetAtt": [
+          "Cluster",
+          "Endpoint"
+        ]
+      }
+    },
+    "ClusterSecurityGroupId": {
+      "Value": {
+        "Fn::GetAtt": [
+          "Cluster",
+          "ClusterSecurityGroupId"
+        ]
+      }
+    },
+    "NodeRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "NodeRole",
+          "Arn"
+        ]
+      }
+    },
+    "NodegroupName": {
+      "Value": {
+        "Ref": "Nodegroup"
+      }
+    },
+    "UsersRepositoryUri": {
+      "Value": {
+        "Fn::GetAtt": [
+          "UsersRepository",
+          "RepositoryUri"
+        ]
+      }
+    },
+    "CatalogRepositoryUri": {
+      "Value": {
+        "Fn::GetAtt": [
+          "CatalogRepository",
+          "RepositoryUri"
+        ]
+      }
+    },
+    "PaymentsRepositoryUri": {
+      "Value": {
+        "Fn::GetAtt": [
+          "PaymentsRepository",
+          "RepositoryUri"
+        ]
+      }
+    }
+  }
+}
+
