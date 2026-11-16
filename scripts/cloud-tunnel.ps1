@@ -61,7 +61,7 @@ function Start-CloudTunnel {
         if ($Purpose -eq 'Eks') {
             if ([string]::IsNullOrWhiteSpace($Kubeconfig)) { throw 'An isolated Kubeconfig is required for an EKS tunnel.' }
             $cluster = Invoke-CloudAws -Arguments @('eks','describe-cluster','--name',$State.NetworkOutputs.ClusterName) -Profile $State.AwsProfile -Region $State.Region -AsJson
-            if ($cluster.cluster.endpoint -cne $endpoint.AbsoluteUri.TrimEnd('/') -or $cluster.cluster.arn -notlike "arn:aws:eks:$($State.Region):$($State.AccountId):cluster/*") { throw 'EKS endpoint/account differs from the verified state.' }
+            if ($cluster.cluster.endpoint -cne $State.NetworkOutputs.ClusterEndpoint -or $cluster.cluster.arn -notlike "arn:aws:eks:$($State.Region):$($State.AccountId):cluster/*") { throw 'EKS endpoint/account differs from the verified state.' }
             Write-CloudPrivateText -Path $Kubeconfig -Text ''
             $null = Invoke-CloudAws -Arguments @('eks','update-kubeconfig','--name',$State.NetworkOutputs.ClusterName,'--alias',$Context,'--kubeconfig',$Kubeconfig) -Profile $State.AwsProfile -Region $State.Region
             $configuration = Invoke-CloudKubectl -Arguments @('config','view','--minify','--raw') -Kubeconfig $Kubeconfig -Context $Context -AsJson
