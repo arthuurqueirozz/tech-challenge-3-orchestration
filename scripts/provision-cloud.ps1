@@ -52,7 +52,7 @@ function Set-KongConfiguration([ValidateSet('Challenge','Business')][string]$Mod
             _format_version='3.0'; _transform=$true
             services=@(@{name='acme-only'; url='http://acme-solver.fcg-platform.svc.cluster.local:8089';
                 routes=@(@{name='acme-only'; protocols=@('http','https'); methods=@('GET');
-                    paths=@('~^/.well-known/acme-challenge/[A-Za-z0-9_-]+$'); strip_path=$false})})
+                    paths=@('~/\.well-known/acme-challenge/[A-Za-z0-9_-]+$'); strip_path=$false})})
         }
         $text = ConvertTo-Json -InputObject $configuration -Depth 20
     }
