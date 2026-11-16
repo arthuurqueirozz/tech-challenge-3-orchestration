@@ -1,6 +1,6 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "FIAP Fase 4 foundation: Ohio VPC, restricted EKS control plane, one managed node and three retained private image repositories. No application deployment.",
+  "Description": "FIAP Fase 4 foundation: Ohio VPC, restricted EKS control plane, two managed m7i-flex.large nodes and three retained private image repositories. No application deployment.",
   "Metadata": {
     "Purpose": "Prepare only after Free plan, permissions, current credit coverage and approved use window are verified. Retained repositories continue to incur storage charges.",
     "FutureDependencies": "Pod Identity/CSI/addons, runtime IAM, persistent workload volumes, SAM and gateway/TLS are separate increments."
@@ -545,7 +545,7 @@
         "AmiType": "AL2023_x86_64_STANDARD",
         "CapacityType": "ON_DEMAND",
         "InstanceTypes": [
-          "m6a.xlarge"
+          "m7i-flex.large"
         ],
         "LaunchTemplate": {
           "Id": {
@@ -559,9 +559,9 @@
           }
         },
         "ScalingConfig": {
-          "MinSize": 1,
-          "DesiredSize": 1,
-          "MaxSize": 1
+          "MinSize": 2,
+          "DesiredSize": 2,
+          "MaxSize": 2
         },
         "UpdateConfig": {
           "MaxUnavailable": 1

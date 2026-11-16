@@ -101,13 +101,13 @@ Users autentica com JWT e mantém identidade/outbox; Catalog controla jogos, bib
 
 Criar/editar/desativar grava estado e pendência de indexação na transação SQL. Worker interno envia o snapshot canônico com revisão, controla concorrência/metadados e mantém pendências em falhas. A consistência é eventual: medir o intervalo observado, sem prometer atualização instantânea. Bootstrap é administrativo, com escritores/workers controlados; não apagar índice em uso. `action.auto_create_index=false` evita recriação implícita sem mapping após perda do índice.
 
-EKS usa um node m6a.xlarge, 4 vCPU/16 GiB, Ohio. É uma demonstração econômica em uma AZ de trabalho; o controle EKS usa duas subnets/AZs. Duas réplicas por API e surge 1 suportam rolling update quando há capacidade. Isso não oferece alta disponibilidade se o node ou a AZ falhar. SQL e Rabbit usam EBS gp3 criptografado com retenção; Redis e Prometheus/Grafana são efêmeros.
+EKS usa dois nodes m7i-flex.large, cada um com 2 vCPU/8 GiB (4 vCPU/16 GiB agregados), Ohio, ambos na AZ A. É uma demonstração econômica em uma AZ de trabalho; o controle EKS usa duas subnets/AZs. O nodegroup fixa mínimo/desejado/máximo em 2. A tentativa m6a.xlarge de 16/11/2026 foi rejeitada por falta de elegibilidade Free, sem iniciar instâncias EC2. API confirmou m7i-flex.large elegível e ofertado nas três AZs de Ohio. Requests das aplicações permanecem os mesmos. Duas réplicas por API e surge 1 suportam rolling update quando há capacidade; verificar os dois nós Ready, allocatable/requests por nó e espaço para migration/surge antes do aceite. Isso não oferece alta disponibilidade: a AZ, a âncora SSM e o target NLB continuam pontos únicos. SQL e Rabbit usam EBS gp3 criptografado com retenção; Redis e Prometheus/Grafana são efêmeros.
 
 Namespaces: `fcg-users`, `fcg-catalog`, `fcg-platform`. Acesso de CI limitado ao próprio namespace e ECR; RBAC nega get/list de Secrets, pods/exec e administração da plataforma. Criar Jobs/alterar Deployment permite usar Secrets/SAs da própria API: a fronteira entre serviços é o namespace, sem promessa de isolamento dos segredos da própria aplicação contra seu deployer. Uma política de admissão impede Services externos nos dois namespaces de API. SQL `sa` fica na plataforma; quatro logins separam runtime/migration de Users/Catalog. Runtime tem datareader/datawriter do seu banco; migration tem db_owner somente nele.
 
 Pods usam EKS Pod Identity: Users só publica em UserCreated; Payments só em PaymentProcessed; Catalog acessa somente seu índice. Os Jobs SQL não têm papel AWS. Um SA separado faz bootstrap do índice com o mesmo escopo de índice do Catalog.
 
-GitHub runner acessa a API privada EKS por Session Manager no node. O documento fixa host EKS e porta 443; só a porta local 8443 é aceita. Kubeconfig aponta para loopback preservando CA e `tls-server-name` real; sem bypass TLS. Um documento separado de OpenSearch/9443 é exclusivo do operador. Substituição do node exige redescobrir InstanceId e atualizar gateway/acesso antes de renovar CI.
+GitHub runner acessa a API privada EKS por Session Manager em uma única âncora `State.NodeInstanceId`. O documento fixa host EKS e porta 443; só a porta local 8443 é aceita. Kubeconfig aponta para loopback preservando CA e `tls-server-name` real; sem bypass TLS. Um documento separado de OpenSearch/9443 é exclusivo do operador. O NLB mantém esse único target; Kong usa `externalTrafficPolicy: Cluster` para alcançar pods no outro nó. Substituição da âncora exige executar Access, atualizar Gateway e variáveis CI antes de renovar CI; não há failover automático nem ampliação da policy SSM para os dois nodes.
 
 ## Ferramentas e validação local
 
@@ -143,7 +143,7 @@ $statePath = Join-Path ([IO.Path]::GetTempPath()) 'fcg-fase4-private/state.local
 ./scripts/prepare-cloud-settings.ps1 -StatePath $statePath
 . ./scripts/cloud-common.ps1
 $state = ConvertFrom-CloudJson -Json (Get-Content -LiteralPath $statePath -Raw -Encoding UTF8)
-$state.AccountId = '668471253419' # conta verificada desta instalacao; conferir com STS
+$state.AccountId = (& aws sts get-caller-identity --profile fiap-fase4 --query Account --output text).Trim() # conferir a conta autorizada no handoff privado
 Write-CloudJson -Path $statePath -Value $state
 ```
 
@@ -154,9 +154,9 @@ aws login --profile fiap-fase4
 ./scripts/provision-cloud.ps1 -Stage Discover -StatePath $statePath
 ```
 
-Discover consulta STS/Free/quota/AZs/capacidade e registra o papel IAM completo (na conta original, `role/managed/AccountFullAccessRole`), CIDR público /32 e AZs reais. Não trocar o ARN pelo da sessão STS, não remover o caminho `managed/`, não presumir AZ pelo nome da região. Se login precisar do navegador, concluir sem colar códigos ou credenciais no chat.
+Discover consulta STS/Free/quota/AZs/capacidade e registra o papel IAM completo (na conta autorizada, o caminho completo deve ser obtido do IAM), CIDR público /32 e AZs reais. Não trocar o ARN pelo da sessão STS, não remover o caminho `managed/`, não presumir AZ pelo nome da região. Se login precisar do navegador, concluir sem colar códigos ou credenciais no chat.
 
-Antes de Network, reconferir preços oficiais e registrar `PriceReviewObservedAtUtc` com a hora UTC real dessa consulta, usando `Write-CloudJson`. Não atualizar esse campo sem verificar os preços. Snapshot de 11/11: EKS USD0,10/h; m6a.xlarge0,1728/h; t3.small.search0,036/h; NLB0,0225/h +0,006/NLCU-h; EBS0,08/GB-mês; OpenSearch gp3 0,122/GB-mês; IPv4 0,005/h; ECR0,10/GB-mês. Somar armazenamento SQL/Rabbit/root/search, IPv4, tráfego, Lambda/SQS/Dynamo/S3/logs e reserva. Gates de timestamps rejeitam observação futura ou antiga. Não executar Network antes de 13/11 20h BRT.
+Antes de Network, reconferir preços oficiais e registrar `PriceReviewObservedAtUtc` com a hora UTC real dessa consulta, usando `Write-CloudJson`. Não atualizar esse campo sem verificar os preços. Correção comprovada em 16/11: m7i-flex.large USD0,09576/h por node (Pricing SKU `NF94DUQA29AU4W9G`), USD0,19152/h pelos dois. Demais referências de 11/11 sujeitas à reconferência: EKS USD0,10/h; t3.small.search0,036/h; NLB0,0225/h +0,006/NLCU-h; EBS0,08/GB-mês; OpenSearch gp3 0,122/GB-mês; IPv4 0,005/h; ECR0,10/GB-mês. Somar armazenamento SQL/Rabbit/duas raízes40GiB/search, IPv4 dos dois nodes e NLB, tráfego, Lambda/SQS/Dynamo/S3/logs e reserva. Network exige saldo para USD0,50/h na janela restante mais USD40 de reserva, plano FREE ACTIVE e validade até o fim da janela. Gates de timestamps rejeitam observação futura ou antiga. Não executar Network antes de 13/11 20h BRT.
 
 ## Sequência de criação dentro da janela
 
@@ -170,7 +170,7 @@ Executar em ordem; interromper na primeira falha. Scripts capturam erros sem des
 ./scripts/provision-cloud.ps1 -Stage Runtime -StatePath $statePath
 ```
 
-Network cria VPC, EKS 1.35/node, ECR e bucket privado de artefatos. Não cria NAT nem outro node. Notifications publica código compilado `linux-x64` em ZIP, usa `aws cloudformation package` para SAM e implanta Lambda/SQS/DynamoDB; não enviar apenas fonte C# para Lambda. Os dois triggers devem ficar habilitados durante o aceite. Runtime verifica/pina versões de addons e cria Pod Identity/EBS CSI/associações. Conferir addons ACTIVE e permissão real; um preflight read-only não comprova criação.
+Network reconfere m7i-flex.large x86_64 com 2vCPU/8192MiB e `FreeTierEligible` booleano true, oferta na AZ A e folga de quota para 4vCPU totais antes de criar VPC, EKS 1.35/dois nodes, ECR e bucket privado de artefatos. Não cria NAT. Notifications publica código compilado `linux-x64` em ZIP, usa `aws cloudformation package` para SAM e implanta Lambda/SQS/DynamoDB; não enviar apenas fonte C# para Lambda. Os dois triggers devem ficar habilitados durante o aceite. Runtime verifica/pina versões de addons e cria Pod Identity/EBS CSI/associações. Conferir addons ACTIVE e permissão real; um preflight read-only não comprova criação.
 
 Se OpenSearch service-linked role estiver ausente, criar somente a oficial e repetir Search; se houver negação Free/SCP, registrar e resolver sem trocar para Paid:
 
@@ -180,7 +180,7 @@ aws iam create-service-linked-role --aws-service-name opensearchservice.amazonaw
 ./scripts/provision-cloud.ps1 -Stage Access -StatePath $statePath
 ```
 
-Access descobre o único node do cluster, exige SSM Online/agente compatível e cria documentos de túnel e papéis limitados. Antes de CI, comprovar que os papéis negam SSM sem documento, documento de shell, host/porta alternativos, SendCommand, namespace alheio, Secrets, administração e Services LoadBalancer. Uma política local correta não substitui testes reais de negação.
+Access verifica o nodegroup ACTIVE do cluster, sua única ASG e exatamente dois nodes running/InService/Healthy, m7i-flex.large, na subnet/AZ A, com IDs e tags coerentes de cluster/nodegroup/ASG e o SG do cluster presente em cada instância. Enquanto o grupo estiver estabilizando, interrompe e requer nova tentativa. Preserva a âncora `State.NodeInstanceId` se ela ainda for um dos dois IDs verificados; caso contrário escolhe o primeiro ID em ordem, exige SSM Online/agente compatível e cria documentos de túnel e papéis limitados a essa âncora. Se ela não estiver SSM Online, interrompe sem trocar silenciosamente para o outro node. Antes de CI, comprovar que os papéis negam SSM sem documento, documento de shell, host/porta alternativos, SendCommand, namespace alheio, Secrets, administração e Services LoadBalancer. Uma política local correta não substitui testes reais de negação.
 
 Publicar imagens iniciais a partir de checkouts limpos dos **SHAs F4 revisados**, em pastas separadas dos fontes em edição. O script recusa checkout sujo ou SHA diferente. Informar SHA real na variável, sem inventá-lo:
 

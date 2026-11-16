@@ -502,4 +502,4 @@ spec:
     port: 8000
     targetPort: proxy
     nodePort: 30080
-  externalTrafficPolicy: Local
+  externalTrafficPolicy: Cluster

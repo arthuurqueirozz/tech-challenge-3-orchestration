@@ -100,15 +100,17 @@ try {
                 $report['AvailabilityZones'] = $names
                 Add-Check 'two-available-zones' ($names.Count -ge 2) 'Require two distinct standard Ohio availability zones.'
             }
-            $types = Read-Aws 'node-instance-type' @('ec2','describe-instance-types','--instance-types','m6a.xlarge')
+            $types = Read-Aws 'node-instance-type' @('ec2','describe-instance-types','--instance-types','m7i-flex.large')
             if ($null -ne $types) {
-                $type = @($types.InstanceTypes)[0]
-                $report['NodeCapacity'] = @{InstanceType=$type.InstanceType; VCpu=$type.VCpuInfo.DefaultVCpus; MemoryMiB=$type.MemoryInfo.SizeInMiB}
-                Add-Check 'node-capacity' ($type.VCpuInfo.DefaultVCpus -eq 4 -and $type.MemoryInfo.SizeInMiB -eq 16384) 'Verify the planned 4-vCPU/16-GiB node, not actual scheduling or capacity reservation.'
+                $items = @($types.InstanceTypes)
+                $type = $items | Select-Object -First 1
+                $report['NodeCapacity'] = @{InstanceType=$type.InstanceType; VCpu=$type.VCpuInfo.DefaultVCpus; MemoryMiB=$type.MemoryInfo.SizeInMiB; NodeCount=2; FreeTierEligible=$type.FreeTierEligible}
+                Add-Check 'node-capacity' ($items.Count -eq 1 -and $type.InstanceType -ceq 'm7i-flex.large' -and $type.VCpuInfo.DefaultVCpus -eq 2 -and $type.MemoryInfo.SizeInMiB -eq 8192 -and 'x86_64' -in $type.ProcessorInfo.SupportedArchitectures) 'Require two x86_64 nodes of 2 vCPU/8 GiB each; aggregate 4 vCPU/16 GiB does not prove schedulability.'
+                Add-Check 'node-free-tier-eligible' ($items.Count -eq 1 -and $type.InstanceType -ceq 'm7i-flex.large' -and $type.FreeTierEligible -is [bool] -and $type.FreeTierEligible -eq $true) 'Require explicit boolean FreeTierEligible=true from EC2; missing, false or string values block creation.'
             }
-            $offerings = Read-Aws 'node-offerings' @('ec2','describe-instance-type-offerings','--location-type','availability-zone','--filters','Name=instance-type,Values=m6a.xlarge')
+            $offerings = Read-Aws 'node-offerings' @('ec2','describe-instance-type-offerings','--location-type','availability-zone','--filters','Name=instance-type,Values=m7i-flex.large')
             if ($null -ne $offerings) {
-                $offeredZones = @($offerings.InstanceTypeOfferings | Select-Object -ExpandProperty Location -Unique)
+                $offeredZones = @($offerings.InstanceTypeOfferings | Where-Object { $_.InstanceType -ceq 'm7i-flex.large' -and $_.LocationType -eq 'availability-zone' -and $_.Location -in $names } | Select-Object -ExpandProperty Location -Unique)
                 $report['NodeOfferedInZones'] = $offeredZones
                 Add-Check 'node-offered-in-ohio' (@($offeredZones | Where-Object { $_ -match '^us-east-2[a-z]$' }).Count -gt 0) 'Offering is not a guarantee of launch permission or physical capacity.'
             }
@@ -117,7 +119,7 @@ try {
                 $report['StandardOnDemandVCpuQuota'] = $quota.Quota.Value
                 $vcpuLimit = [double]0
                 $quotaOk = [double]::TryParse([Convert]::ToString($quota.Quota.Value, [Globalization.CultureInfo]::InvariantCulture), [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$vcpuLimit)
-                Add-Check 'node-vcpu-limit' ($quotaOk -and -not [double]::IsInfinity($vcpuLimit) -and $vcpuLimit -ge 4) 'Limit must cover the node; current account usage still needs inspection before launch.'
+                Add-Check 'node-vcpu-limit' ($quotaOk -and -not [double]::IsInfinity($vcpuLimit) -and $vcpuLimit -ge 4) 'Limit must cover both nodes (4 vCPU total); current account usage still needs inspection before launch.'
             }
             $versions = Read-Aws 'eks-version' @('eks','describe-cluster-versions','--cluster-versions','1.35')
             if ($null -ne $versions) {

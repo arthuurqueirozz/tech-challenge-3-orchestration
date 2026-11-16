@@ -115,13 +115,29 @@ switch ($Stage) {
         Assert-ObservationTime $state.PreflightObservedAtUtc 2 'PreflightObservedAtUtc'
         # Published prices must be rechecked on the day of creation, not inherited from an old snapshot.
         Assert-ObservationTime $state.PriceReviewObservedAtUtc 24 'PriceReviewObservedAtUtc'
+        $plannedTypes = Invoke-OperatorAws @('ec2','describe-instance-types','--instance-types','m7i-flex.large') -Json
+        $plannedNodes = @($plannedTypes.InstanceTypes)
+        if ($plannedNodes.Count -ne 1 -or $plannedNodes[0].InstanceType -cne 'm7i-flex.large' -or
+            $plannedNodes[0].VCpuInfo.DefaultVCpus -ne 2 -or $plannedNodes[0].MemoryInfo.SizeInMiB -ne 8192 -or
+            'x86_64' -notin $plannedNodes[0].ProcessorInfo.SupportedArchitectures -or
+            $plannedNodes[0].FreeTierEligible -isnot [bool] -or $plannedNodes[0].FreeTierEligible -ne $true) {
+            throw 'Both planned m7i-flex.large nodes require verified 2-vCPU/8-GiB x86_64 capacity and explicit FreeTierEligible=true before CloudFormation.'
+        }
+        $offering = Invoke-OperatorAws @('ec2','describe-instance-type-offerings','--location-type','availability-zone','--filters','Name=instance-type,Values=m7i-flex.large',"Name=location,Values=$($state.AvailabilityZoneA)") -Json
+        if (@($offering.InstanceTypeOfferings | Where-Object { $_.InstanceType -ceq 'm7i-flex.large' -and $_.LocationType -eq 'availability-zone' -and $_.Location -ceq $state.AvailabilityZoneA }).Count -ne 1) {
+            throw 'The planned node type is not verified as offered in the selected working AZ.'
+        }
         $instances = Invoke-OperatorAws @('ec2','describe-instances','--filters','Name=instance-state-name,Values=pending,running,stopping,stopped') -Json
         $active = @($instances.Reservations.Instances | Where-Object { $_.State.Name -in @('pending','running') })
         $used = 0
         if ($active.Count -gt 0) {
             $types = @($active.InstanceType | Sort-Object -Unique)
             $typesResponse = Invoke-OperatorAws (@('ec2','describe-instance-types','--instance-types') + $types) -Json
-            foreach ($instance in $active) { $used += [int](@($typesResponse.InstanceTypes | Where-Object InstanceType -eq $instance.InstanceType)[0].VCpuInfo.DefaultVCpus) }
+            foreach ($instance in $active) {
+                $currentType = @($typesResponse.InstanceTypes | Where-Object InstanceType -eq $instance.InstanceType)
+                if ($currentType.Count -ne 1 -or $currentType[0].VCpuInfo.DefaultVCpus -le 0) { throw 'Cannot verify vCPU usage of an active instance.' }
+                $used += [int]$currentType[0].VCpuInfo.DefaultVCpus
+            }
         }
         $quota = Invoke-OperatorAws @('service-quotas','get-service-quota','--service-code','ec2','--quota-code','L-1216C47A') -Json
         if ($used + 4 -gt [double]$quota.Quota.Value) { throw 'Current instance usage leaves insufficient verified standard-vCPU quota.' }
@@ -167,10 +183,45 @@ switch ($Stage) {
         } 'SearchOutputs'
     }
     'Access' {
+        $nodegroupName = "$($state.ProjectName)-primary"
+        $groupResponse = Invoke-OperatorAws @('eks','describe-nodegroup','--cluster-name',$state.NetworkOutputs.ClusterName,'--nodegroup-name',$nodegroupName) -Json
+        $group = $groupResponse.nodegroup
+        if ($group.clusterName -cne $state.NetworkOutputs.ClusterName -or $group.nodegroupName -cne $nodegroupName -or $group.status -cne 'ACTIVE' -or
+            @($group.instanceTypes).Count -ne 1 -or $group.instanceTypes[0] -cne 'm7i-flex.large' -or
+            @($group.subnets).Count -ne 1 -or $group.subnets[0] -cne $state.NetworkOutputs.PublicSubnetAId -or
+            $group.scalingConfig.minSize -ne 2 -or $group.scalingConfig.desiredSize -ne 2 -or $group.scalingConfig.maxSize -ne 2) {
+            throw 'Expected the ACTIVE intended managed nodegroup with two m7i-flex.large nodes in subnet A.'
+        }
+        $asgNames = @($group.resources.autoScalingGroups.name)
+        if ($asgNames.Count -ne 1 -or [string]::IsNullOrWhiteSpace($asgNames[0])) { throw 'Expected one verified Auto Scaling group for the managed nodegroup.' }
+        $asgResponse = Invoke-OperatorAws @('autoscaling','describe-auto-scaling-groups','--auto-scaling-group-names',$asgNames[0]) -Json
+        $asgs = @($asgResponse.AutoScalingGroups)
+        if ($asgs.Count -ne 1 -or $asgs[0].AutoScalingGroupName -cne $asgNames[0] -or
+            $asgs[0].MinSize -ne 2 -or $asgs[0].DesiredCapacity -ne 2 -or $asgs[0].MaxSize -ne 2 -or
+            @($asgs[0].Instances).Count -ne 2 -or
+            @($asgs[0].Instances | Where-Object { $_.LifecycleState -cne 'InService' -or $_.HealthStatus -cne 'Healthy' -or $_.AvailabilityZone -cne $state.AvailabilityZoneA }).Count -gt 0) {
+            throw 'Expected exactly two healthy InService instances in the intended Auto Scaling group and AZ A; retry Access after stabilization.'
+        }
+        $asgIds = @($asgs[0].Instances.InstanceId | Sort-Object -Unique)
         $nodes = Invoke-OperatorAws @('ec2','describe-instances','--filters',"Name=tag:eks:cluster-name,Values=$($state.NetworkOutputs.ClusterName)",'Name=instance-state-name,Values=running') -Json
         $instances = @($nodes.Reservations.Instances)
-        if ($instances.Count -ne 1) { throw 'Expected exactly one running managed cluster node.' }
-        Set-StateValue 'NodeInstanceId' $instances[0].InstanceId
+        if ($instances.Count -ne 2 -or $asgIds.Count -ne 2) { throw 'Expected exactly two running managed cluster nodes.' }
+        foreach ($instance in $instances) {
+            if ($instance.InstanceId -notmatch '^i-(?:[0-9a-f]{8}|[0-9a-f]{17})$' -or $instance.InstanceId -notin $asgIds -or
+                $instance.State.Name -cne 'running' -or $instance.InstanceType -cne 'm7i-flex.large' -or
+                $instance.Placement.AvailabilityZone -cne $state.AvailabilityZoneA -or $instance.SubnetId -cne $state.NetworkOutputs.PublicSubnetAId -or
+                [string]::IsNullOrWhiteSpace($state.NetworkOutputs.ClusterSecurityGroupId) -or
+                $state.NetworkOutputs.ClusterSecurityGroupId -notin @($instance.SecurityGroups.GroupId) -or
+                @($instance.Tags | Where-Object { $_.Key -ceq 'eks:cluster-name' -and $_.Value -ceq $state.NetworkOutputs.ClusterName }).Count -ne 1 -or
+                @($instance.Tags | Where-Object { $_.Key -ceq 'eks:nodegroup-name' -and $_.Value -ceq $nodegroupName }).Count -ne 1 -or
+                @($instance.Tags | Where-Object { $_.Key -ceq 'aws:autoscaling:groupName' -and $_.Value -ceq $asgNames[0] }).Count -ne 1) {
+                throw 'A running instance does not match the intended cluster, nodegroup, Auto Scaling group, type, subnet, AZ and cluster security group.'
+            }
+        }
+        $verifiedIds = @($instances.InstanceId | Sort-Object -Unique)
+        if ($verifiedIds.Count -ne 2) { throw 'Expected two distinct verified node instance IDs.' }
+        # Keep the sole SSM/NLB anchor stable; selecting a replacement does not provide automatic failover.
+        if ($state.NodeInstanceId -notin $verifiedIds) { Set-StateValue 'NodeInstanceId' $verifiedIds[0] }
         $ssm = Invoke-OperatorAws @('ssm','describe-instance-information','--filters',"Key=InstanceIds,Values=$($state.NodeInstanceId)") -Json
         if (@($ssm.InstanceInformationList).Count -ne 1 -or $ssm.InstanceInformationList[0].PingStatus -ne 'Online' -or [version]$ssm.InstanceInformationList[0].AgentVersion -lt [version]'3.1.1374.0') { throw 'Wait for the intended node to be SSM Online with remote-host forwarding support.' }
         Deploy-Stack 'access' (Join-Path $repo 'infra/aws/templates/deploy-access.json') @{

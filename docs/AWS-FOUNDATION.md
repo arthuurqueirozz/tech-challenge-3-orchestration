@@ -6,10 +6,12 @@ Esta etapa prepara dois templates, sem implantar aplicações ou ativar pipeline
 
 | Template | Conteúdo |
 |---|---|
-| `infra/aws/templates/network-compute.json` | VPC Ohio, duas subnets públicas/AZs distintas, IGW, EKS1.35 com acesso privado e público restrito a um IPv4 /32, administrador IAM explícito, um nó AL2023 m6a.xlarge, raiz40GiB gp3 criptografada/IMDSv2 e três ECRs privados |
+| `infra/aws/templates/network-compute.json` | VPC Ohio, duas subnets públicas/AZs distintas, IGW, EKS1.35 com acesso privado e público restrito a um IPv4 /32, administrador IAM explícito, dois nós AL2023 m7i-flex.large na AZ A (4vCPU/16GiB agregados), raiz40GiB gp3 criptografada/IMDSv2 por nó e três ECRs privados |
 | `infra/aws/templates/search.json` | OpenSearch2.19 VPC, uma AZ, t3.small.search, 10GiB gp3, HTTPS/criptografia e porta443 acessível apenas pelo SG do cluster |
 
-Não há NAT, Spot, Auto Mode, SSH ou criação de provedor OIDC. A identidade administrativa é um ARN IAM existente, nunca o ARN STS de uma sessão. O nó recebe as permissões CNI necessárias ao bootstrap; separar as identidades dos componentes é parte da etapa seguinte.
+Não há NAT, Spot, Auto Mode, SSH ou criação de provedor OIDC. A identidade administrativa é um ARN IAM existente, nunca o ARN STS de uma sessão. Os nós recebem as permissões CNI necessárias ao bootstrap; separar as identidades dos componentes é parte da etapa seguinte.
+
+Em 16/11/2026, a tentativa com m6a.xlarge foi rejeitada por `InvalidParameterCombination` por falta de elegibilidade Free; nenhuma instância EC2 iniciou. A correção usa dois m7i-flex.large (2vCPU/8GiB cada), com elegibilidade Free e oferta nas três AZs de Ohio comprovadas por API. Pricing SKU `NF94DUQA29AU4W9G`: USD0,09576/h por nó, USD0,19152/h pelo par. Recalcular também duas raízes EBS e os IPv4 dos dois nós, além do NLB. O teto conservador USD0,50/h mais reserva USD40 permanece gate de cobertura da janela; não é promessa de gratuidade nem autorização de upgrade Paid.
 
 ## Conferência somente leitura
 
@@ -21,7 +23,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-aws-found
   -AwsExecutable $env:FCG_AWS_CLI -OutputPath $env:FCG_PREFLIGHT_PATH
 ```
 
-O script consulta identidade, plano/crédito, role IAM, zonas, tipo/oferta do nó, quota, versão EKS e limites OpenSearch. Uma conta incorreta ou sessão expirada interrompe as verificações. Não faz login, criação, atualização, change set ou exclusão. Os erros são classificados sem registrar a resposta bruta de autenticação.
+O script consulta identidade, plano/crédito, role IAM, zonas, tipo/oferta dos nós, quota, versão EKS e limites OpenSearch. Exige m7i-flex.large x86_64 com 2vCPU/8192MiB por nó e `FreeTierEligible` explicitamente booleano true; campo ausente/false/string bloqueia. A quota deve cobrir 4vCPU e Network reconfere uso atual, elegibilidade e oferta na AZ A antes de CloudFormation. Uma conta incorreta ou sessão expirada interrompe as verificações. Não faz login, criação, atualização, change set ou exclusão. Os erros são classificados sem registrar a resposta bruta de autenticação.
 
 `GateStatus=read-only-verified` comprova apenas as consultas. **`ReadyToProvision` e `CreationPermissionsVerified` permanecem false.** Ainda é necessário verificar uso da quota, capacidade real, permissões de criação/SCP, janela/cobertura financeira, revisão dos arquivos e a operação concreta a executar.
 
@@ -73,6 +75,6 @@ ECRs, domínio OpenSearch e seu SG usam retenção contra exclusão/substituiç�
 
 Na janela de encerramento acordada: exportar/preservar dados e evidências; identificar recursos e custos; executar exclusão explicitamente autorizada do domínio, aguardar remoção de suas ENIs e remover o SG retido; tratar imagens/repositórios retidos; então encerrar nodegroup/EKS/rede. PVCs/snapshots da etapa posterior terão seu próprio tratamento. Não há script de exclusão automática nesta etapa.
 
-Um nó e uma AZ não oferecem alta disponibilidade contra perda do nó/zona. A continuidade de rollout das APIs é uma verificação diferente.
+Dois nós na mesma AZ, com uma única âncora SSM/NLB, não oferecem alta disponibilidade. Access verifica os dois nós por EKS/Auto Scaling/EC2 e mantém `State.NodeInstanceId` se ainda estiver entre eles; caso contrário, seleciona deterministicamente um ID verificado. A troca exige reparar Access, Gateway e variáveis CI; não há failover automático. Kong usa `externalTrafficPolicy: Cluster` para o NodePort encaminhar a pods no outro nó. Antes de aceitar rollout, verificar dois nós Ready, allocatable/requests por nó e espaço para migration e surge; a capacidade agregada não garante agendamento.
 
 Referências: [serviços da experiência Free](https://docs.aws.amazon.com/accounts/latest/reference/supported-services-sign-up-new.html), [versões EKS](https://docs.aws.amazon.com/eks/latest/userguide/kubernetes-versions.html), [LaunchTemplate EKS](https://docs.aws.amazon.com/eks/latest/userguide/launch-templates.html), [limites OpenSearch](https://docs.aws.amazon.com/opensearch-service/latest/developerguide/limits.html), [policies do domínio](https://docs.aws.amazon.com/opensearch-service/latest/developerguide/ac.html).
