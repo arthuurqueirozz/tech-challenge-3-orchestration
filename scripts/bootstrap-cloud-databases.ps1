@@ -214,6 +214,7 @@ else
     exit 1
 fi
 '@
+$shell = $shell.Replace("`r`n", "`n")
 $jobName = 'sql-bootstrap-' + [Guid]::NewGuid().ToString('N').Substring(0, 12)
 $secretName = "$jobName-credentials"
 $configName = "$jobName-sql"

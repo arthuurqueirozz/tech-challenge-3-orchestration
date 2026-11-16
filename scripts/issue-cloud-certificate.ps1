@@ -150,6 +150,7 @@ touch /acme/ready
 echo 'Staging and production certificates issued; waiting for protected extraction.'
 sleep 600
 '@
+$shell = $shell.Replace("`r`n", "`n")
 $job = @{ apiVersion = 'batch/v1'; kind = 'Job'; metadata = @{ name = $jobName; namespace = 'fcg-platform'; labels = $labels }; spec = @{
     backoffLimit = 0; activeDeadlineSeconds = $TimeoutSeconds + $holdSeconds + 120
     template = @{ metadata = @{ labels = $labels }; spec = @{
