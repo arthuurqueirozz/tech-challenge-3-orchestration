@@ -13,7 +13,7 @@ function Install-CloudKongTls {
     $ancestor = $certificateDirectory
     while ($ancestor) {
         if (Test-Path -LiteralPath (Join-Path $ancestor '.git')) { throw 'TLS private material must remain outside Git.' }
-        if ((Get-Item -LiteralPath $ancestor).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'TLS private paths must not traverse links.' }
+        if ((Get-Item -LiteralPath $ancestor -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'TLS private paths must not traverse links.' }
         $ancestor = [IO.Path]::GetDirectoryName($ancestor)
     }
     foreach ($file in @('cert.pem','chain.pem','privkey.pem')) {
