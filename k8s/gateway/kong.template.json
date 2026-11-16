@@ -19,6 +19,12 @@
       "url": "http://users-api:8080",
       "routes": [
         {
+          "name": "users-status-public",
+          "methods": ["GET"],
+          "paths": ["~/status/users/?$"],
+          "strip_path": true
+        },
+        {
           "name": "auth-public",
           "methods": [
             "POST"
@@ -63,6 +69,22 @@
       "name": "catalog-api",
       "url": "http://catalog-api:8080",
       "routes": [
+        {
+          "name": "catalog-status-public",
+          "methods": ["GET"],
+          "paths": ["~/status/catalog/?$"],
+          "strip_path": true
+        },
+        {
+          "name": "search-public",
+          "methods": [
+            "GET"
+          ],
+          "paths": [
+            "~/search/?$"
+          ],
+          "strip_path": false
+        },
         {
           "name": "games-public",
           "methods": [

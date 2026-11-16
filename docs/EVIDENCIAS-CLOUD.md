@@ -1,5 +1,7 @@
 # Gate cloud - Etapas 2 e 3
 
+> Registro histórico da Fase 3; não comprova a infraestrutura ou a entrega da Fase 4. Procedimentos e estado atuais: [CLOUD-OPERACAO.md](CLOUD-OPERACAO.md). Scripts antigos podem pausar triggers e não devem ser reutilizados diretamente no aceite atual.
+
 Execução em 2026-09-14, região us-east-1. Referência: PDF oficial, páginas 4 a 6,
 reconsultadas antes do deploy e da validação. Código da Lambda/template em
 `tech-challenge-3-notifications-function`, base `e871215`; script reproduzível

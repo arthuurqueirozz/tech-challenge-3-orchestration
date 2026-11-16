@@ -1,0 +1,49 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fcg-gp3-retain
+  labels:
+    app.kubernetes.io/part-of: fcg
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  encrypted: 'true'
+  csi.storage.k8s.io/fstype: ext4
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Retain
+allowVolumeExpansion: true
+allowedTopologies:
+- matchLabelExpressions:
+  - key: topology.ebs.csi.aws.com/zone
+    values:
+    - __AVAILABILITY_ZONE_A__
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sql-data
+  namespace: fcg-platform
+  labels:
+    app.kubernetes.io/part-of: fcg
+spec:
+  storageClassName: fcg-gp3-retain
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rabbit-data
+  namespace: fcg-platform
+  labels:
+    app.kubernetes.io/part-of: fcg
+spec:
+  storageClassName: fcg-gp3-retain
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi

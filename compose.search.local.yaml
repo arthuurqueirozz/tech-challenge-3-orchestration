@@ -1,0 +1,132 @@
+# Focused, local Fase 4 search stack. Never use these settings for AWS.
+# Generate ignored settings with scripts/prepare-search.ps1 before running.
+name: fcg-fase4-search-local
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: ${FCG_SQL_PASSWORD:?Run scripts/prepare-search.ps1}
+    mem_limit: 2g
+    volumes:
+      - search-sql-data:/var/opt/mssql
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ': > /dev/tcp/127.0.0.1/1433'"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 20s
+  rabbitmq:
+    image: rabbitmq:4-management
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: fcg-search
+      RABBITMQ_DEFAULT_PASS: ${FCG_RABBIT_PASSWORD:?Run scripts/prepare-search.ps1}
+    mem_limit: 512m
+    volumes:
+      - search-rabbit-data:/var/lib/rabbitmq
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
+    mem_limit: 128m
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 2s
+      retries: 10
+  opensearch:
+    image: opensearchproject/opensearch:2.19.0
+    environment:
+      discovery.type: single-node
+      node.store.allow_mmap: "false"
+      action.auto_create_index: "false"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      DISABLE_SECURITY_PLUGIN: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+    mem_limit: 2g
+    volumes:
+      - search-index-data:/usr/share/opensearch/data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s"]
+      interval: 5s
+      timeout: 10s
+      retries: 40
+      start_period: 30s
+  catalog-api:
+    build:
+      context: ../tech-challenge-2-catalog-api
+    image: ${FCG_CATALOG_IMAGE:?Run scripts/prepare-search.ps1}
+    env_file:
+      - ${FCG_CATALOG_ENV_FILE:?Run scripts/prepare-search.ps1}
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      AWS_EC2_METADATA_DISABLED: "true"
+      Search__Endpoint: http://opensearch:9200
+      Search__IndexName: fcg-games-local
+      Search__Region: us-east-2
+      Search__UseAwsAuth: "false"
+      Search__RequestTimeoutSeconds: "3"
+      Search__BatchSize: "20"
+      Search__PollIntervalSeconds: "1"
+      Search__MaxRetryDelaySeconds: "15"
+    mem_limit: 512m
+    networks: [backend]
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+      # Redis and OpenSearch are not runtime readiness dependencies.
+      # depends_on only sequences this local bootstrap.
+  kong:
+    image: kong:3.9.3
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /etc/kong/kong.json
+      KONG_PROXY_LISTEN: "0.0.0.0:8000"
+      KONG_ADMIN_LISTEN: "off"
+      KONG_STATUS_LISTEN: "0.0.0.0:8100"
+      KONG_NGINX_WORKER_PROCESSES: "1"
+      # Docker can assign a new backend IP after an application restart.
+      KONG_DNS_VALID_TTL: "1"
+      KONG_DNS_STALE_TTL: "0"
+      KONG_PLUGINS: jwt
+      KONG_PROXY_ACCESS_LOG: "off"
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+    mem_limit: 512m
+    ports:
+      - "127.0.0.1:${FCG_GATEWAY_PORT:-18084}:8000"
+    volumes:
+      - type: bind
+        source: ${FCG_KONG_CONFIG_FILE:?Run scripts/prepare-search.ps1}
+        target: /etc/kong/kong.json
+        read_only: true
+    networks: [backend, edge]
+    depends_on: [catalog-api]
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+networks:
+  backend:
+    internal: true
+  edge: {}
+volumes:
+  search-sql-data:
+  search-rabbit-data:
+  search-index-data:

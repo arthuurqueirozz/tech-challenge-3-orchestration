@@ -1,0 +1,25 @@
+{
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+    "name": "users-api",
+    "labels": {
+      "app": "users-api",
+      "app.kubernetes.io/name": "users-api",
+      "app.kubernetes.io/part-of": "fcg"
+    }
+  },
+  "spec": {
+    "type": "ClusterIP",
+    "selector": {
+      "app": "users-api"
+    },
+    "ports": [
+      {
+        "name": "http",
+        "port": 8080,
+        "targetPort": "http"
+      }
+    ]
+  }
+}

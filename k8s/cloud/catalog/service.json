@@ -1,0 +1,25 @@
+{
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+    "name": "catalog-api",
+    "labels": {
+      "app": "catalog-api",
+      "app.kubernetes.io/name": "catalog-api",
+      "app.kubernetes.io/part-of": "fcg"
+    }
+  },
+  "spec": {
+    "type": "ClusterIP",
+    "selector": {
+      "app": "catalog-api"
+    },
+    "ports": [
+      {
+        "name": "http",
+        "port": 8080,
+        "targetPort": "http"
+      }
+    ]
+  }
+}

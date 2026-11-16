@@ -1,0 +1,355 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "FCG single-AZ NLB to Kong NodePort, fixed public IP and imported TLS certificate. HTTP exists only during ACME challenge-only bootstrap.",
+  "Parameters": {
+    "ProjectName": {
+      "Type": "String",
+      "Default": "fcg-fase4",
+      "AllowedPattern": "^[a-z][a-z0-9-]{1,18}[a-z0-9]$"
+    },
+    "VpcId": {
+      "Type": "AWS::EC2::VPC::Id"
+    },
+    "PublicSubnetAId": {
+      "Type": "AWS::EC2::Subnet::Id"
+    },
+    "ClusterSecurityGroupId": {
+      "Type": "AWS::EC2::SecurityGroup::Id"
+    },
+    "NodeInstanceId": {
+      "Type": "String",
+      "AllowedPattern": "^i-([0-9a-f]{8}|[0-9a-f]{17})$"
+    },
+    "CertificateArn": {
+      "Type": "String",
+      "Default": "",
+      "AllowedPattern": "^$|^arn:aws:acm:us-east-2:[0-9]{12}:certificate/[a-f0-9-]+$"
+    },
+    "AllowHttpChallenge": {
+      "Type": "String",
+      "Default": "false",
+      "AllowedValues": [
+        "true",
+        "false"
+      ]
+    }
+  },
+  "Rules": {
+    "OhioOnly": {
+      "Assertions": [
+        {
+          "Assert": {
+            "Fn::Equals": [
+              {
+                "Ref": "AWS::Region"
+              },
+              "us-east-2"
+            ]
+          },
+          "AssertDescription": "Only Ohio is configured."
+        }
+      ]
+    }
+  },
+  "Conditions": {
+    "HasCertificate": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "CertificateArn"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "ChallengeEnabled": {
+      "Fn::Equals": [
+        {
+          "Ref": "AllowHttpChallenge"
+        },
+        "true"
+      ]
+    }
+  },
+  "Resources": {
+    "PublicIp": {
+      "Type": "AWS::EC2::EIP",
+      "Properties": {
+        "Domain": "vpc",
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    },
+    "LoadBalancerSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Public TLS, temporary ACME HTTP; no administration.",
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 443,
+            "ToPort": 443,
+            "CidrIp": "0.0.0.0/0"
+          }
+        ],
+        "SecurityGroupEgress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 30080,
+            "ToPort": 30080,
+            "DestinationSecurityGroupId": {
+              "Ref": "ClusterSecurityGroupId"
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    },
+    "ChallengeIngress": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Condition": "ChallengeEnabled",
+      "Properties": {
+        "GroupId": {
+          "Ref": "LoadBalancerSecurityGroup"
+        },
+        "IpProtocol": "tcp",
+        "FromPort": 80,
+        "ToPort": 80,
+        "CidrIp": "0.0.0.0/0",
+        "Description": "Only while Kong exposes ACME challenge routes"
+      }
+    },
+    "KongNodeIngress": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": {
+          "Ref": "ClusterSecurityGroupId"
+        },
+        "IpProtocol": "tcp",
+        "FromPort": 30080,
+        "ToPort": 30080,
+        "SourceSecurityGroupId": {
+          "Ref": "LoadBalancerSecurityGroup"
+        },
+        "Description": "Kong NodePort only from this NLB"
+      }
+    },
+    "LoadBalancer": {
+      "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      "Properties": {
+        "Name": {
+          "Fn::Sub": "${ProjectName}-gateway"
+        },
+        "Type": "network",
+        "Scheme": "internet-facing",
+        "SecurityGroups": [
+          {
+            "Ref": "LoadBalancerSecurityGroup"
+          }
+        ],
+        "SubnetMappings": [
+          {
+            "SubnetId": {
+              "Ref": "PublicSubnetAId"
+            },
+            "AllocationId": {
+              "Fn::GetAtt": [
+                "PublicIp",
+                "AllocationId"
+              ]
+            }
+          }
+        ],
+        "LoadBalancerAttributes": [
+          {
+            "Key": "load_balancing.cross_zone.enabled",
+            "Value": "false"
+          },
+          {
+            "Key": "deletion_protection.enabled",
+            "Value": "false"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    },
+    "KongTargets": {
+      "Type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+      "Properties": {
+        "Name": {
+          "Fn::Sub": "${ProjectName}-kong"
+        },
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "Protocol": "TCP",
+        "Port": 30080,
+        "TargetType": "instance",
+        "HealthCheckProtocol": "TCP",
+        "HealthCheckPort": "traffic-port",
+        "Targets": [
+          {
+            "Id": {
+              "Ref": "NodeInstanceId"
+            },
+            "Port": 30080
+          }
+        ],
+        "TargetGroupAttributes": [
+          {
+            "Key": "preserve_client_ip.enabled",
+            "Value": "true"
+          },
+          {
+            "Key": "deregistration_delay.timeout_seconds",
+            "Value": "15"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    },
+    "ChallengeListener": {
+      "Type": "AWS::ElasticLoadBalancingV2::Listener",
+      "Condition": "ChallengeEnabled",
+      "Properties": {
+        "LoadBalancerArn": {
+          "Ref": "LoadBalancer"
+        },
+        "Port": 80,
+        "Protocol": "TCP",
+        "DefaultActions": [
+          {
+            "Type": "forward",
+            "TargetGroupArn": {
+              "Ref": "KongTargets"
+            }
+          }
+        ]
+      }
+    },
+    "HttpsListener": {
+      "Type": "AWS::ElasticLoadBalancingV2::Listener",
+      "Condition": "HasCertificate",
+      "Properties": {
+        "LoadBalancerArn": {
+          "Ref": "LoadBalancer"
+        },
+        "Port": 443,
+        "Protocol": "TLS",
+        "Certificates": [
+          {
+            "CertificateArn": {
+              "Ref": "CertificateArn"
+            }
+          }
+        ],
+        "SslPolicy": "ELBSecurityPolicy-TLS13-1-2-2021-06",
+        "DefaultActions": [
+          {
+            "Type": "forward",
+            "TargetGroupArn": {
+              "Ref": "KongTargets"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "PublicIp": {
+      "Value": {
+        "Ref": "PublicIp"
+      }
+    },
+    "PublicUrl": {
+      "Value": {
+        "Fn::Sub": "https://${PublicIp}"
+      }
+    },
+    "LoadBalancerArn": {
+      "Value": {
+        "Ref": "LoadBalancer"
+      }
+    },
+    "LoadBalancerDnsName": {
+      "Value": {
+        "Fn::GetAtt": [
+          "LoadBalancer",
+          "DNSName"
+        ]
+      }
+    },
+    "TargetGroupArn": {
+      "Value": {
+        "Ref": "KongTargets"
+      }
+    },
+    "NodeInstanceId": {
+      "Value": {
+        "Ref": "NodeInstanceId"
+      }
+    },
+    "HttpChallengeEnabled": {
+      "Value": {
+        "Ref": "AllowHttpChallenge"
+      }
+    },
+    "HttpsConfigured": {
+      "Value": {
+        "Fn::If": [
+          "HasCertificate",
+          "true",
+          "false"
+        ]
+      }
+    }
+  }
+}

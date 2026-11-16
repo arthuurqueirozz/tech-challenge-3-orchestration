@@ -1,0 +1,516 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "FCG Fase 4 restricted deployment roles, EKS access entries and fixed-destination SSM tunnels. Bootstrap operator only; deploy roles cannot create infrastructure.",
+  "Parameters": {
+    "ProjectName": {
+      "Type": "String",
+      "Default": "fcg-fase4",
+      "AllowedPattern": "^[a-z][a-z0-9-]{1,18}[a-z0-9]$"
+    },
+    "ClusterName": {
+      "Type": "String",
+      "AllowedPattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$"
+    },
+    "ClusterEndpoint": {
+      "Type": "String",
+      "AllowedPattern": "^https://[A-Za-z0-9.-]+$"
+    },
+    "SearchEndpoint": {
+      "Type": "String",
+      "AllowedPattern": "^https://[A-Za-z0-9.-]+$"
+    },
+    "NodeInstanceId": {
+      "Type": "String",
+      "AllowedPattern": "^i-([0-9a-f]{8}|[0-9a-f]{17})$"
+    },
+    "OperatorRoleArn": {
+      "Type": "String",
+      "AllowedPattern": "^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$"
+    }
+  },
+  "Rules": {
+    "OhioOnly": {
+      "Assertions": [
+        {
+          "Assert": {
+            "Fn::Equals": [
+              {
+                "Ref": "AWS::Region"
+              },
+              "us-east-2"
+            ]
+          },
+          "AssertDescription": "Use the verified Ohio region."
+        }
+      ]
+    }
+  },
+  "Resources": {
+    "EksTunnelDocument": {
+      "Type": "AWS::SSM::Document",
+      "Properties": {
+        "Name": {
+          "Fn::Sub": "${ProjectName}-eks-tunnel"
+        },
+        "DocumentType": "Session",
+        "DocumentFormat": "JSON",
+        "UpdateMethod": "NewVersion",
+        "Content": {
+          "schemaVersion": "1.0",
+          "description": "Fixed endpoint HTTPS tunnel; no remote host, remote port or shell parameters.",
+          "sessionType": "Port",
+          "parameters": {
+            "localPortNumber": {
+              "type": "String",
+              "default": "8443",
+              "allowedValues": [
+                "8443"
+              ]
+            }
+          },
+          "properties": {
+            "host": {
+              "Fn::Select": [
+                2,
+                {
+                  "Fn::Split": [
+                    "/",
+                    {
+                      "Ref": "ClusterEndpoint"
+                    }
+                  ]
+                }
+              ]
+            },
+            "portNumber": "443",
+            "localPortNumber": "{{ localPortNumber }}"
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    },
+    "SearchTunnelDocument": {
+      "Type": "AWS::SSM::Document",
+      "Properties": {
+        "Name": {
+          "Fn::Sub": "${ProjectName}-search-operator-tunnel"
+        },
+        "DocumentType": "Session",
+        "DocumentFormat": "JSON",
+        "UpdateMethod": "NewVersion",
+        "Content": {
+          "schemaVersion": "1.0",
+          "description": "Fixed endpoint HTTPS tunnel; no remote host, remote port or shell parameters.",
+          "sessionType": "Port",
+          "parameters": {
+            "localPortNumber": {
+              "type": "String",
+              "default": "9443",
+              "allowedValues": [
+                "9443"
+              ]
+            }
+          },
+          "properties": {
+            "host": {
+              "Fn::Select": [
+                2,
+                {
+                  "Fn::Split": [
+                    "/",
+                    {
+                      "Ref": "SearchEndpoint"
+                    }
+                  ]
+                }
+              ]
+            },
+            "portNumber": "443",
+            "localPortNumber": "{{ localPortNumber }}"
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    },
+    "UsersDeployRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "fiap-f4-users-deploy",
+        "MaxSessionDuration": 3600,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Ref": "OperatorRoleArn"
+                }
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "scoped-api-deployment",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "IdentityAndRegistryLogin",
+                  "Effect": "Allow",
+                  "Action": [
+                    "sts:GetCallerIdentity",
+                    "ecr:GetAuthorizationToken"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "OwnImageRepository",
+                  "Effect": "Allow",
+                  "Action": [
+                    "ecr:BatchCheckLayerAvailability",
+                    "ecr:InitiateLayerUpload",
+                    "ecr:UploadLayerPart",
+                    "ecr:CompleteLayerUpload",
+                    "ecr:PutImage",
+                    "ecr:DescribeImages",
+                    "ecr:BatchGetImage",
+                    "ecr:GetDownloadUrlForLayer"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/${ProjectName}/users"
+                  }
+                },
+                {
+                  "Sid": "DescribeOwnCluster",
+                  "Effect": "Allow",
+                  "Action": "eks:DescribeCluster",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:eks:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}"
+                  }
+                },
+                {
+                  "Sid": "OnlyFixedEksTunnel",
+                  "Effect": "Allow",
+                  "Action": "ssm:StartSession",
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${NodeInstanceId}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:document/${EksTunnelDocument}"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "DenyOtherSessionDestinations",
+                  "Effect": "Deny",
+                  "Action": "ssm:StartSession",
+                  "NotResource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${NodeInstanceId}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:document/${EksTunnelDocument}"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "OwnSessionLifecycle",
+                  "Effect": "Allow",
+                  "Action": [
+                    "ssm:TerminateSession",
+                    "ssm:ResumeSession",
+                    "ssmmessages:OpenDataChannel"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:session/*"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "ssm:resourceTag/aws:ssmmessages:session-id": "${aws:userid}"
+                    }
+                  }
+                },
+                {
+                  "Sid": "NoSsmShellOrDocumentMutation",
+                  "Effect": "Deny",
+                  "Action": [
+                    "ssm:SendCommand",
+                    "ssm:CreateDocument",
+                    "ssm:UpdateDocument",
+                    "ssm:UpdateDocumentDefaultVersion",
+                    "ssm:DeleteDocument"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    },
+    "UsersDeployAccess": {
+      "Type": "AWS::EKS::AccessEntry",
+      "Properties": {
+        "ClusterName": {
+          "Ref": "ClusterName"
+        },
+        "PrincipalArn": {
+          "Fn::GetAtt": [
+            "UsersDeployRole",
+            "Arn"
+          ]
+        },
+        "Type": "STANDARD",
+        "KubernetesGroups": [
+          "fcg:users-deploy"
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    },
+    "CatalogDeployRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "fiap-f4-catalog-deploy",
+        "MaxSessionDuration": 3600,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Ref": "OperatorRoleArn"
+                }
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "scoped-api-deployment",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "IdentityAndRegistryLogin",
+                  "Effect": "Allow",
+                  "Action": [
+                    "sts:GetCallerIdentity",
+                    "ecr:GetAuthorizationToken"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "OwnImageRepository",
+                  "Effect": "Allow",
+                  "Action": [
+                    "ecr:BatchCheckLayerAvailability",
+                    "ecr:InitiateLayerUpload",
+                    "ecr:UploadLayerPart",
+                    "ecr:CompleteLayerUpload",
+                    "ecr:PutImage",
+                    "ecr:DescribeImages",
+                    "ecr:BatchGetImage",
+                    "ecr:GetDownloadUrlForLayer"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/${ProjectName}/catalog"
+                  }
+                },
+                {
+                  "Sid": "DescribeOwnCluster",
+                  "Effect": "Allow",
+                  "Action": "eks:DescribeCluster",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:eks:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}"
+                  }
+                },
+                {
+                  "Sid": "OnlyFixedEksTunnel",
+                  "Effect": "Allow",
+                  "Action": "ssm:StartSession",
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${NodeInstanceId}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:document/${EksTunnelDocument}"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "DenyOtherSessionDestinations",
+                  "Effect": "Deny",
+                  "Action": "ssm:StartSession",
+                  "NotResource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${NodeInstanceId}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:document/${EksTunnelDocument}"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "OwnSessionLifecycle",
+                  "Effect": "Allow",
+                  "Action": [
+                    "ssm:TerminateSession",
+                    "ssm:ResumeSession",
+                    "ssmmessages:OpenDataChannel"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:session/*"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "ssm:resourceTag/aws:ssmmessages:session-id": "${aws:userid}"
+                    }
+                  }
+                },
+                {
+                  "Sid": "NoSsmShellOrDocumentMutation",
+                  "Effect": "Deny",
+                  "Action": [
+                    "ssm:SendCommand",
+                    "ssm:CreateDocument",
+                    "ssm:UpdateDocument",
+                    "ssm:UpdateDocumentDefaultVersion",
+                    "ssm:DeleteDocument"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    },
+    "CatalogDeployAccess": {
+      "Type": "AWS::EKS::AccessEntry",
+      "Properties": {
+        "ClusterName": {
+          "Ref": "ClusterName"
+        },
+        "PrincipalArn": {
+          "Fn::GetAtt": [
+            "CatalogDeployRole",
+            "Arn"
+          ]
+        },
+        "Type": "STANDARD",
+        "KubernetesGroups": [
+          "fcg:catalog-deploy"
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "EksTunnelDocumentName": {
+      "Value": {
+        "Ref": "EksTunnelDocument"
+      }
+    },
+    "SearchTunnelDocumentName": {
+      "Value": {
+        "Ref": "SearchTunnelDocument"
+      }
+    },
+    "UsersDeployRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "UsersDeployRole",
+          "Arn"
+        ]
+      }
+    },
+    "UsersDeployGroup": {
+      "Value": "fcg:users-deploy"
+    },
+    "CatalogDeployRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "CatalogDeployRole",
+          "Arn"
+        ]
+      }
+    },
+    "CatalogDeployGroup": {
+      "Value": "fcg:catalog-deploy"
+    }
+  }
+}

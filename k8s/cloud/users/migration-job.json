@@ -1,0 +1,78 @@
+{
+  "apiVersion": "batch/v1",
+  "kind": "Job",
+  "metadata": {
+    "name": "users-migrate-template",
+    "labels": {
+      "app": "users-api",
+      "app.kubernetes.io/name": "users-api",
+      "app.kubernetes.io/part-of": "fcg",
+      "fcg.dev/operation": "migration"
+    }
+  },
+  "spec": {
+    "backoffLimit": 0,
+    "activeDeadlineSeconds": 300,
+    "template": {
+      "metadata": {
+        "labels": {
+          "app": "users-migration",
+          "app.kubernetes.io/name": "users-migration",
+          "app.kubernetes.io/part-of": "fcg",
+          "fcg.dev/operation": "migration"
+        }
+      },
+      "spec": {
+        "serviceAccountName": "users-migration",
+        "automountServiceAccountToken": false,
+        "restartPolicy": "Never",
+        "terminationGracePeriodSeconds": 30,
+        "containers": [
+          {
+            "name": "migration",
+            "image": "replace.invalid/fcg@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+            "imagePullPolicy": "IfNotPresent",
+            "args": [
+              "--migrate"
+            ],
+            "env": [
+              {
+                "name": "ASPNETCORE_ENVIRONMENT",
+                "value": "Production"
+              }
+            ],
+            "envFrom": [
+              {
+                "secretRef": {
+                  "name": "users-migration-secrets"
+                }
+              }
+            ],
+            "resources": {
+              "requests": {
+                "cpu": "100m",
+                "memory": "128Mi"
+              },
+              "limits": {
+                "cpu": "1",
+                "memory": "512Mi"
+              }
+            },
+            "securityContext": {
+              "runAsNonRoot": true,
+              "allowPrivilegeEscalation": false,
+              "capabilities": {
+                "drop": [
+                  "ALL"
+                ]
+              },
+              "seccompProfile": {
+                "type": "RuntimeDefault"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

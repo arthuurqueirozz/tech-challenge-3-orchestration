@@ -1,0 +1,585 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "FIAP Fase 4 runtime identities and EKS addons. No IAM user trust, static application credentials or migration AWS roles.",
+  "Metadata": {
+    "Order": "network-compute and Notifications SAM first; runtime-identity next; search consumes CatalogSearchRoleArn. DomainName builds the scoped ARN without a circular stack dependency.",
+    "Preconditions": "Verify addon versions with EKS APIs for the selected cluster version before creation. Service accounts are created by Kubernetes bootstrap. Do not disable association session tags: role trust requires them.",
+    "EbsOwnership": "EbsCsi owns its ebs-csi-controller-sa Pod Identity association. Do not create a second association for this service account. The managed policy scopes writable volumes by the CSI managed tag.",
+    "Sources": [
+      "https://docs.aws.amazon.com/eks/latest/userguide/pod-id-role.html",
+      "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-eks-addon.html",
+      "https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AmazonEBSCSIDriverPolicyV2.html"
+    ]
+  },
+  "Parameters": {
+    "ProjectName": {
+      "Type": "String",
+      "Default": "fcg-fase4",
+      "MinLength": 3,
+      "MaxLength": 28,
+      "AllowedPattern": "^[a-z][a-z0-9-]*$"
+    },
+    "ClusterName": {
+      "Type": "String",
+      "MinLength": 1,
+      "MaxLength": 100,
+      "AllowedPattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+    },
+    "DomainName": {
+      "Type": "String",
+      "MinLength": 3,
+      "MaxLength": 28,
+      "AllowedPattern": "^[a-z][a-z0-9-]*$"
+    },
+    "IndexName": {
+      "Type": "String",
+      "MinLength": 1,
+      "MaxLength": 128,
+      "AllowedPattern": "^[a-z0-9][a-z0-9_-]*$"
+    },
+    "UserCreatedQueueArn": {
+      "Type": "String",
+      "AllowedPattern": "^arn:aws:sqs:us-east-2:[0-9]{12}:[A-Za-z0-9_-]+$",
+      "Description": "Actual UserCreatedQueueArn output of Notifications SAM in this account and region."
+    },
+    "PaymentProcessedQueueArn": {
+      "Type": "String",
+      "AllowedPattern": "^arn:aws:sqs:us-east-2:[0-9]{12}:[A-Za-z0-9_-]+$",
+      "Description": "Actual PaymentProcessedQueueArn output of Notifications SAM in this account and region."
+    },
+    "PodIdentityAgentVersion": {
+      "Type": "String",
+      "AllowedPattern": "^v[0-9]+[.][0-9]+[.][0-9]+-eksbuild[.][0-9]+$",
+      "Description": "Explicit version confirmed by describe-addon-versions for the cluster Kubernetes version."
+    },
+    "EbsCsiVersion": {
+      "Type": "String",
+      "AllowedPattern": "^v[0-9]+[.][0-9]+[.][0-9]+-eksbuild[.][0-9]+$",
+      "Description": "Explicit aws-ebs-csi-driver version confirmed by describe-addon-versions and describe-addon-configuration."
+    }
+  },
+  "Rules": {
+    "OhioOnly": {
+      "Assertions": [
+        {
+          "Assert": {
+            "Fn::Equals": [
+              {
+                "Ref": "AWS::Region"
+              },
+              "us-east-2"
+            ]
+          },
+          "AssertDescription": "Deploy only in the verified Ohio region us-east-2."
+        }
+      ]
+    }
+  },
+  "Resources": {
+    "PodIdentityAgent": {
+      "Type": "AWS::EKS::Addon",
+      "Properties": {
+        "ClusterName": {
+          "Ref": "ClusterName"
+        },
+        "AddonName": "eks-pod-identity-agent",
+        "AddonVersion": {
+          "Ref": "PodIdentityAgentVersion"
+        },
+        "ResolveConflicts": "NONE",
+        "PreserveOnDelete": false,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    },
+    "UsersPublisherRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": {
+          "Fn::Sub": "${ProjectName}-users-publisher"
+        },
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "pods.eks.amazonaws.com"
+              },
+              "Action": [
+                "sts:AssumeRole",
+                "sts:TagSession"
+              ],
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestTag/eks-cluster-arn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:eks:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}"
+                  },
+                  "aws:RequestTag/kubernetes-namespace": "fcg-users",
+                  "aws:RequestTag/kubernetes-service-account": [
+                    "users-api"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ],
+        "Policies": [
+          {
+            "PolicyName": {
+              "Fn::Sub": "${ProjectName}-users-publisher"
+            },
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "sqs:SendMessage",
+                  "Resource": {
+                    "Ref": "UserCreatedQueueArn"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "PaymentsPublisherRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": {
+          "Fn::Sub": "${ProjectName}-payments-publisher"
+        },
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "pods.eks.amazonaws.com"
+              },
+              "Action": [
+                "sts:AssumeRole",
+                "sts:TagSession"
+              ],
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestTag/eks-cluster-arn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:eks:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}"
+                  },
+                  "aws:RequestTag/kubernetes-namespace": "fcg-platform",
+                  "aws:RequestTag/kubernetes-service-account": [
+                    "payments-api"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ],
+        "Policies": [
+          {
+            "PolicyName": {
+              "Fn::Sub": "${ProjectName}-payments-publisher"
+            },
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "sqs:SendMessage",
+                  "Resource": {
+                    "Ref": "PaymentProcessedQueueArn"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "CatalogSearchRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": {
+          "Fn::Sub": "${ProjectName}-catalog-search"
+        },
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "pods.eks.amazonaws.com"
+              },
+              "Action": [
+                "sts:AssumeRole",
+                "sts:TagSession"
+              ],
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestTag/eks-cluster-arn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:eks:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}"
+                  },
+                  "aws:RequestTag/kubernetes-namespace": "fcg-catalog",
+                  "aws:RequestTag/kubernetes-service-account": [
+                    "catalog-api",
+                    "catalog-search-bootstrap"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ],
+        "Policies": [
+          {
+            "PolicyName": {
+              "Fn::Sub": "${ProjectName}-catalog-search"
+            },
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "es:ESHttpGet",
+                    "es:ESHttpHead",
+                    "es:ESHttpPost",
+                    "es:ESHttpPut"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:es:${AWS::Region}:${AWS::AccountId}:domain/${DomainName}/${IndexName}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:es:${AWS::Region}:${AWS::AccountId}:domain/${DomainName}/${IndexName}/*"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "EbsCsiRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": {
+          "Fn::Sub": "${ProjectName}-ebs-csi"
+        },
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "pods.eks.amazonaws.com"
+              },
+              "Action": [
+                "sts:AssumeRole",
+                "sts:TagSession"
+              ],
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestTag/eks-cluster-arn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:eks:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}"
+                  },
+                  "aws:RequestTag/kubernetes-namespace": "kube-system",
+                  "aws:RequestTag/kubernetes-service-account": [
+                    "ebs-csi-controller-sa"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ],
+        "ManagedPolicyArns": [
+          {
+            "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/AmazonEBSCSIDriverPolicyV2"
+          }
+        ]
+      }
+    },
+    "UsersPodIdentity": {
+      "Type": "AWS::EKS::PodIdentityAssociation",
+      "DependsOn": "PodIdentityAgent",
+      "Properties": {
+        "ClusterName": {
+          "Ref": "ClusterName"
+        },
+        "Namespace": "fcg-users",
+        "ServiceAccount": "users-api",
+        "RoleArn": {
+          "Fn::GetAtt": [
+            "UsersPublisherRole",
+            "Arn"
+          ]
+        },
+        "DisableSessionTags": false,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    },
+    "PaymentsPodIdentity": {
+      "Type": "AWS::EKS::PodIdentityAssociation",
+      "DependsOn": "PodIdentityAgent",
+      "Properties": {
+        "ClusterName": {
+          "Ref": "ClusterName"
+        },
+        "Namespace": "fcg-platform",
+        "ServiceAccount": "payments-api",
+        "RoleArn": {
+          "Fn::GetAtt": [
+            "PaymentsPublisherRole",
+            "Arn"
+          ]
+        },
+        "DisableSessionTags": false,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    },
+    "CatalogPodIdentity": {
+      "Type": "AWS::EKS::PodIdentityAssociation",
+      "DependsOn": "PodIdentityAgent",
+      "Properties": {
+        "ClusterName": {
+          "Ref": "ClusterName"
+        },
+        "Namespace": "fcg-catalog",
+        "ServiceAccount": "catalog-api",
+        "RoleArn": {
+          "Fn::GetAtt": [
+            "CatalogSearchRole",
+            "Arn"
+          ]
+        },
+        "DisableSessionTags": false,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    },
+    "CatalogBootstrapPodIdentity": {
+      "Type": "AWS::EKS::PodIdentityAssociation",
+      "DependsOn": "PodIdentityAgent",
+      "Properties": {
+        "ClusterName": {
+          "Ref": "ClusterName"
+        },
+        "Namespace": "fcg-catalog",
+        "ServiceAccount": "catalog-search-bootstrap",
+        "RoleArn": {
+          "Fn::GetAtt": [
+            "CatalogSearchRole",
+            "Arn"
+          ]
+        },
+        "DisableSessionTags": false,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    },
+    "EbsCsi": {
+      "Type": "AWS::EKS::Addon",
+      "DependsOn": "PodIdentityAgent",
+      "Properties": {
+        "ClusterName": {
+          "Ref": "ClusterName"
+        },
+        "AddonName": "aws-ebs-csi-driver",
+        "AddonVersion": {
+          "Ref": "EbsCsiVersion"
+        },
+        "ResolveConflicts": "NONE",
+        "PreserveOnDelete": false,
+        "PodIdentityAssociations": [
+          {
+            "RoleArn": {
+              "Fn::GetAtt": [
+                "EbsCsiRole",
+                "Arn"
+              ]
+            },
+            "ServiceAccount": "ebs-csi-controller-sa"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "UsersPublisherRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "UsersPublisherRole",
+          "Arn"
+        ]
+      }
+    },
+    "PaymentsPublisherRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "PaymentsPublisherRole",
+          "Arn"
+        ]
+      }
+    },
+    "CatalogSearchRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "CatalogSearchRole",
+          "Arn"
+        ]
+      }
+    },
+    "EbsCsiRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "EbsCsiRole",
+          "Arn"
+        ]
+      }
+    },
+    "PodIdentityAgentId": {
+      "Value": {
+        "Ref": "PodIdentityAgent"
+      }
+    },
+    "EbsCsiAddonId": {
+      "Value": {
+        "Ref": "EbsCsi"
+      }
+    },
+    "UsersPodIdentityAssociationId": {
+      "Value": {
+        "Ref": "UsersPodIdentity"
+      }
+    },
+    "PaymentsPodIdentityAssociationId": {
+      "Value": {
+        "Ref": "PaymentsPodIdentity"
+      }
+    },
+    "CatalogPodIdentityAssociationId": {
+      "Value": {
+        "Ref": "CatalogPodIdentity"
+      }
+    },
+    "CatalogBootstrapPodIdentityAssociationId": {
+      "Value": {
+        "Ref": "CatalogBootstrapPodIdentity"
+      }
+    }
+  }
+}
