@@ -77,8 +77,8 @@ O workspace autor tem código em `work/tech-challenge-fase-4/repos/` e evidênci
 
 ```mermaid
 flowchart LR
-  Client[Cliente HTTPS] --> NLB[NLB e certificado IP no ACM]
-  NLB --> Kong[Kong no EKS]
+  Client[Cliente HTTPS] --> NLB[NLB TCP443]
+  NLB --> Kong[Kong TLS8443 com certificado IP]
   Kong --> Users[Users API]
   Kong --> Catalog[Catalog API]
   Users --> SQL[(SQL Users e Catalog)]
@@ -215,7 +215,7 @@ Platform aplica namespaces, política de admissão, RBAC, Secrets/ConfigMaps, vo
 
 ## HTTPS gratuito sem domínio
 
-O usuário não possui domínio. A solução usa certificado público Let's Encrypt para o IPv4 elástico do NLB, perfil shortlived, importado ao ACM. Emitir perto do início da janela e conferir validade até 18/11 20h BRT. Certificado staging não é confiável para apresentação.
+O usuário não possui domínio. A solução usa certificado público Let's Encrypt para o IPv4 elástico do NLB, perfil shortlived. A c?pia p?blica fica registrada no ACM; o NLB n?o aceita esse certificado sem FQDN em listener TLS. Portanto, TCP443 atravessa o NLB e termina TLS no Kong8443, via NodePort30443 restrito ao security group do NLB. Emitir perto do início da janela e conferir validade até 18/11 20h BRT. Certificado staging não é confiável para apresentação.
 
 ```powershell
 ./scripts/provision-cloud.ps1 -Stage GatewayChallenge -StatePath $statePath
@@ -225,7 +225,9 @@ O usuário não possui domínio. A solução usa certificado público Let's Encr
 
 GatewayChallenge primeiro instala **somente a rota ACME**, reinicia/aguarda Kong e depois abre HTTP80. O solver Certbot atende apenas o desafio. Durante essa etapa, não há login ou negócio público em HTTP. O emissor testa staging e depois produção, guarda arquivos com ACL, valida IP/chave/cadeia/prazo e grava `CertificateArn`. GatewayHttps remove listener/ingresso80, confirma sua ausência e só então ativa rotas de negócio com JWT na configuração Secret do Kong. Falha mantém challenge-only; não resolver usando `-k`, certificado inválido ou abrindo negócio em HTTP.
 
-Validar `https://<IP real>/status/users`, `/status/catalog` e `/search?q=...` com validação TLS normal. Conferir NotAfter, IP SAN e certificado importado/associado. O IP não está disponível antes da criação real; não há URL pública de demo neste snapshot.
+Renova??o: n?o sobrescrever silenciosamente um Secret divergente. Emitir/validar o novo certificado numa janela controlada, revisar a troca do Secret e reiniciar Kong; o helper recusa diverg?ncia at? essa reconcilia??o expl?cita. Manter PEMs e arquivo de contas ACME fora do Git, com ACL privada.
+
+Validar `https://<IP real>/status/users`, `/status/catalog` e `/search?q=...` com validação TLS normal. Conferir NotAfter, IP SAN e certificado servido pelo Kong igual ao fingerprint salvo (ACM n?o est? associado ao listener TCP). O IP não está disponível antes da criação real; não há URL pública de demo neste snapshot.
 
 ## CI/CD real de Users e Catalog
 

@@ -410,6 +410,8 @@ spec:
         app.kubernetes.io/part-of: fcg
     spec:
       serviceAccountName: kong
+      securityContext:
+        fsGroup: 1001
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: 45
       containers:
@@ -419,6 +421,8 @@ spec:
         ports:
         - name: proxy
           containerPort: 8000
+        - name: proxy-tls
+          containerPort: 8443
         - name: status
           containerPort: 8100
         resources:
@@ -457,7 +461,19 @@ spec:
         - name: KONG_DECLARATIVE_CONFIG
           value: /etc/kong/declarative/kong.json
         - name: KONG_PROXY_LISTEN
-          value: 0.0.0.0:8000
+          value: 0.0.0.0:8000, 0.0.0.0:8443 ssl
+        - name: KONG_SSL_CERT
+          valueFrom:
+            secretKeyRef:
+              name: fcg-kong-tls
+              key: ssl-cert-path
+              optional: true
+        - name: KONG_SSL_CERT_KEY
+          valueFrom:
+            secretKeyRef:
+              name: fcg-kong-tls
+              key: ssl-key-path
+              optional: true
         - name: KONG_ADMIN_LISTEN
           value: 'off'
         - name: KONG_STATUS_LISTEN
@@ -477,10 +493,23 @@ spec:
         - name: KONG_DNS_NOT_FOUND_TTL
           value: '0'
         volumeMounts:
+        - name: tls
+          mountPath: /etc/kong/tls
+          readOnly: true
         - name: config
           mountPath: /etc/kong/declarative
           readOnly: true
       volumes:
+      - name: tls
+        secret:
+          secretName: fcg-kong-tls
+          optional: true
+          defaultMode: 288
+          items:
+          - key: tls.crt
+            path: tls.crt
+          - key: tls.key
+            path: tls.key
       - name: config
         secret:
           secretName: fcg-kong-config
@@ -504,4 +533,8 @@ spec:
     port: 8000
     targetPort: proxy
     nodePort: 30080
+  - name: proxy-tls
+    port: 8443
+    targetPort: proxy-tls
+    nodePort: 30443
   externalTrafficPolicy: Cluster

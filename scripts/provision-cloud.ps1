@@ -6,6 +6,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'cloud-tunnel.ps1')
+. (Join-Path $PSScriptRoot 'install-cloud-kong-tls.ps1')
 if ($AwsExecutable) { $env:FCG_AWS_EXECUTABLE = $AwsExecutable }
 if (-not $env:FCG_AWS_EXECUTABLE) { $env:FCG_AWS_EXECUTABLE = (Get-Command aws -CommandType Application -ErrorAction Stop).Source }
 $state = Read-CloudState -Path $StatePath
@@ -38,6 +39,15 @@ function Deploy-Stack([string]$Name, [string]$Template, [System.Collections.IDic
     Set-StateValue $OutputProperty ([pscustomobject]$outputs)
     Save-State
     Write-Host "Verified stack outputs saved: $Name."
+}
+function Apply-CloudPlatform {
+    if ($state.Images.payments -cnotmatch ('^' + [regex]::Escape($state.NetworkOutputs.PaymentsRepositoryUri) + '@sha256:[0-9a-f]{64}$')) { throw 'Record the published Payments image digest before applying platform resources.' }
+    $rendered = K @('kustomize',(Join-Path $repo 'k8s/cloud/bootstrap'))
+    $rendered = $rendered.Replace('__AVAILABILITY_ZONE_A__',$state.NetworkOutputs.AvailabilityZoneA).Replace('__PAYMENTS_IMAGE__',$state.Images.payments)
+    if ($rendered -match '__[A-Z0-9_]+__') { throw 'Unresolved bootstrap token.' }
+    $manifest = Join-Path $directory 'bootstrap.local.yaml'
+    Write-CloudPrivateText -Path $manifest -Text $rendered
+    $null = K @('apply','-f',$manifest)
 }
 function Get-AddonVersion([string]$Name) {
     $response = Invoke-OperatorAws @('eks','describe-addon-versions','--kubernetes-version','1.35','--addon-name',$Name) -Json
@@ -242,13 +252,7 @@ switch ($Stage) {
                 & (Join-Path $PSScriptRoot 'apply-cloud-secrets.ps1') -StatePath $StatePath -Kubeconfig $config
                 $existing = K @('get','secrets','--field-selector','metadata.name=fcg-kong-config') 'fcg-platform' -Json
                 if (@($existing.items).Count -eq 0) { Set-KongConfiguration 'Challenge' -Initial }
-                if ($state.Images.payments -cnotmatch ('^' + [regex]::Escape($state.NetworkOutputs.PaymentsRepositoryUri) + '@sha256:[0-9a-f]{64}$')) { throw 'Record the published Payments image digest before applying platform resources.' }
-                $rendered = K @('kustomize',(Join-Path $repo 'k8s/cloud/bootstrap'))
-                $rendered = $rendered.Replace('__AVAILABILITY_ZONE_A__',$state.NetworkOutputs.AvailabilityZoneA).Replace('__PAYMENTS_IMAGE__',$state.Images.payments)
-                if ($rendered -match '__[A-Z0-9_]+__') { throw 'Unresolved bootstrap token.' }
-                $manifest = Join-Path $directory 'bootstrap.local.yaml'
-                Write-CloudPrivateText -Path $manifest -Text $rendered
-                $null = K @('apply','-f',$manifest)
+                Apply-CloudPlatform
                 foreach ($name in @('sqlserver','rabbitmq','redis','kong','payments-api','prometheus','grafana')) { $null = K @('rollout','status',"deployment/$name",'--timeout=300s') 'fcg-platform' }
                 & (Join-Path $PSScriptRoot 'bootstrap-cloud-databases.ps1') -StatePath $StatePath -Kubeconfig $config
             }
@@ -288,6 +292,11 @@ switch ($Stage) {
                 }
                 else {
                     if (-not $state.CertificateArn) { throw 'Import a verified production IP certificate before activating HTTPS.' }
+                    Install-CloudKongTls -State $state -StatePath $StatePath -Kubeconfig $config
+                    Apply-CloudPlatform
+                    $null = K @('rollout','restart','deployment/kong') 'fcg-platform'
+                    $null = K @('rollout','status','deployment/kong','--timeout=300s') 'fcg-platform'
+                    Assert-CloudKongTls -State $state -Kubeconfig $config
                     $certificateArn = $state.CertificateArn; $challenge = 'false'
                 }
                 Deploy-Stack 'gateway' (Join-Path $repo 'infra/aws/templates/gateway.json') @{
@@ -297,6 +306,9 @@ switch ($Stage) {
                 if ($Stage -eq 'GatewayHttps') {
                     $listeners = Invoke-OperatorAws @('elbv2','describe-listeners','--load-balancer-arn',$state.GatewayOutputs.LoadBalancerArn) -Json
                     if (@($listeners.Listeners | Where-Object Port -eq 80).Count -gt 0) { throw 'HTTP listener still exists; keep business routes disabled.' }
+                    $tls = @($listeners.Listeners | Where-Object { $_.Port -eq 443 -and $_.Protocol -ceq 'TCP' })
+                    if ($tls.Count -ne 1 -or @($tls[0].DefaultActions | Where-Object { $_.TargetGroupArn -ceq $state.GatewayOutputs.TlsTargetGroupArn }).Count -ne 1) { throw 'Expected TCP443 forwarding to the dedicated Kong TLS target group.' }
+                    $null = Invoke-OperatorAws @('elbv2','wait','target-in-service','--target-group-arn',$state.GatewayOutputs.TlsTargetGroupArn)
                     Set-KongConfiguration 'Business'
                 }
             }

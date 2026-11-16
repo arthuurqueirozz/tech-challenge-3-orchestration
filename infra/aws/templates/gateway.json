@@ -1,6 +1,6 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "FCG single-AZ NLB to Kong NodePort, fixed public IP and imported TLS certificate. HTTP exists only during ACME challenge-only bootstrap.",
+  "Description": "FCG single-AZ NLB TCP passthrough to Kong TLS with fixed public IP. HTTP exists only during ACME challenge-only bootstrap.",
   "Parameters": {
     "ProjectName": {
       "Type": "String",
@@ -115,6 +115,22 @@
             "DestinationSecurityGroupId": {
               "Ref": "ClusterSecurityGroupId"
             }
+          },
+          {
+            "Fn::If": [
+              "HasCertificate",
+              {
+                "IpProtocol": "tcp",
+                "FromPort": 30443,
+                "ToPort": 30443,
+                "DestinationSecurityGroupId": {
+                  "Ref": "ClusterSecurityGroupId"
+                }
+              },
+              {
+                "Ref": "AWS::NoValue"
+              }
+            ]
           }
         ],
         "Tags": [
@@ -283,24 +299,79 @@
           "Ref": "LoadBalancer"
         },
         "Port": 443,
-        "Protocol": "TLS",
-        "Certificates": [
-          {
-            "CertificateArn": {
-              "Ref": "CertificateArn"
-            }
-          }
-        ],
-        "SslPolicy": "ELBSecurityPolicy-TLS13-1-2-2021-06",
+        "Protocol": "TCP",
         "DefaultActions": [
           {
             "Type": "forward",
             "TargetGroupArn": {
-              "Ref": "KongTargets"
+              "Ref": "KongTlsTargets"
             }
           }
         ]
       }
+    },
+    "KongTlsNodeIngress": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Condition": "HasCertificate",
+      "Properties": {
+        "GroupId": {
+          "Ref": "ClusterSecurityGroupId"
+        },
+        "IpProtocol": "tcp",
+        "FromPort": 30443,
+        "ToPort": 30443,
+        "SourceSecurityGroupId": {
+          "Ref": "LoadBalancerSecurityGroup"
+        },
+        "Description": "Kong TLS NodePort only from this NLB"
+      }
+    },
+    "KongTlsTargets": {
+      "Type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+      "Properties": {
+        "Name": {
+          "Fn::Sub": "${ProjectName}-kong-tls"
+        },
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "Protocol": "TCP",
+        "Port": 30443,
+        "TargetType": "instance",
+        "HealthCheckProtocol": "TCP",
+        "HealthCheckPort": "traffic-port",
+        "Targets": [
+          {
+            "Id": {
+              "Ref": "NodeInstanceId"
+            },
+            "Port": 30443
+          }
+        ],
+        "TargetGroupAttributes": [
+          {
+            "Key": "preserve_client_ip.enabled",
+            "Value": "true"
+          },
+          {
+            "Key": "deregistration_delay.timeout_seconds",
+            "Value": "15"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      },
+      "Condition": "HasCertificate"
     }
   },
   "Outputs": {
@@ -349,6 +420,12 @@
           "true",
           "false"
         ]
+      }
+    },
+    "TlsTargetGroupArn": {
+      "Condition": "HasCertificate",
+      "Value": {
+        "Ref": "KongTlsTargets"
       }
     }
   }
