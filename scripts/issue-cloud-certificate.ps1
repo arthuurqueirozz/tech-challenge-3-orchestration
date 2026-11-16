@@ -114,10 +114,10 @@ if (@($kongList.items).Count -ne 1) { throw 'The existing ACME-only Kong configu
 try { $kong = ConvertFrom-CloudJson -Json ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($kongList.items[0].data.'kong.json'))) }
 catch { throw 'The existing Kong configuration could not be verified safely.' }
 $services = @($kong.services)
-$routes = if ($services.Count -eq 1) { @($services[0].routes) } else { @() }
+$routes = @(if ($services.Count -eq 1) { $services[0].routes })
 if ($services.Count -ne 1 -or $services[0].name -cne 'acme-only' -or $services[0].url -cne 'http://acme-solver.fcg-platform.svc.cluster.local:8089' -or
     $routes.Count -ne 1 -or @($routes[0].methods).Count -ne 1 -or $routes[0].methods[0] -cne 'GET' -or
-    @($routes[0].paths).Count -ne 1 -or $routes[0].paths[0] -cne '~^/.well-known/acme-challenge/[A-Za-z0-9_-]+$' -or $routes[0].strip_path -ne $false -or
+    @($routes[0].paths).Count -ne 1 -or $routes[0].paths[0] -cne '~/\.well-known/acme-challenge/[A-Za-z0-9_-]+$' -or $routes[0].strip_path -ne $false -or
     @($kong.PSObject.Properties.Name | Where-Object { $_ -notin @('_format_version', '_transform', 'services') }).Count -gt 0) {
     throw 'Kong must contain only the reviewed ACME GET route before certificate issuance.'
 }
