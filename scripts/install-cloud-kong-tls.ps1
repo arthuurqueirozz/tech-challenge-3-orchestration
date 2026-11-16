@@ -4,7 +4,7 @@
 function Install-CloudKongTls {
     [CmdletBinding()]
     param([Parameter(Mandatory=$true)]$State, [Parameter(Mandatory=$true)][string]$StatePath,
-        [Parameter(Mandatory=$true)][string]$Kubeconfig, [string]$Context='fcg-fase4')
+        [Parameter(Mandatory=$true)][string]$Kubeconfig, [string]$Context='fcg-fase4', [switch]$ValidateOnly)
     Assert-CloudWindow -State $State
     $privateRoot = [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($StatePath))
     $certificateDirectory = [IO.Path]::GetFullPath([string]$State.CertificatePrivateDirectory)
@@ -26,7 +26,7 @@ function Install-CloudKongTls {
     if (-not ([string]$State.CertificateArn).StartsWith($arnPrefix,[StringComparison]::Ordinal) -or
         $State.CertificateFingerprintSha256 -cnotmatch '^[a-f0-9]{64}$') { throw 'Expected verified production certificate metadata.' }
     $saved = Invoke-CloudAws -Arguments @('acm','describe-certificate','--certificate-arn',$State.CertificateArn) -Profile $State.AwsProfile -Region $State.Region -AsJson
-    if ($saved.Certificate.Status -cne 'ISSUED' -or @($saved.Certificate.SubjectAlternativeNames) -notcontains $State.GatewayOutputs.PublicIp) { throw 'Saved certificate does not cover the gateway IP.' }
+    if ($saved.Certificate.Status -cne 'ISSUED') { throw 'Saved certificate is not issued.' }
     $certificatePem = [IO.File]::ReadAllText((Join-Path $certificateDirectory 'cert.pem'))
     $chainPem = [IO.File]::ReadAllText((Join-Path $certificateDirectory 'chain.pem'))
     $keyPem = [IO.File]::ReadAllText((Join-Path $certificateDirectory 'privkey.pem'))
@@ -77,6 +77,7 @@ print('TLS_MATERIAL_VALIDATED')
         $arguments += @('certbot/certbot@sha256:91808b1b417f72daa57763337e6080c6b90c49b409d06778924f9a9d4affde02','/input/validate-kong-tls.local.py',[string]$State.GatewayOutputs.PublicIp,[string]$State.WindowEndUtc,[string]$State.CertificateFingerprintSha256)
         $result = Invoke-CloudNative -Executable $docker -Arguments $arguments
         if ($result.Trim() -cne 'TLS_MATERIAL_VALIDATED') { throw 'Offline TLS key/IP validation did not complete.' }
+        if ($ValidateOnly) { return }
         $data = @{}
         foreach ($entry in @{'tls.crt'=($certificatePem.Trim()+"`n"+$chainPem.Trim()+"`n");'tls.key'=$keyPem;'ssl-cert-path'='/etc/kong/tls/tls.crt';'ssl-key-path'='/etc/kong/tls/tls.key'}.GetEnumerator()) {
             $data[$entry.Key] = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($entry.Value))

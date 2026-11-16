@@ -89,11 +89,13 @@ if ($state.CertificateArn) {
     $arnPrefix = 'arn:aws:acm:{0}:{1}:certificate/' -f $state.Region, $state.AccountId
     if (-not $state.CertificateArn.StartsWith($arnPrefix, [StringComparison]::Ordinal)) { throw 'The saved ACM certificate belongs to a different account/region.' }
     $saved = Invoke-CertificateAws -Arguments @('acm', 'describe-certificate', '--certificate-arn', $state.CertificateArn) -AsJson
-    if ($saved.Certificate.Status -cne 'ISSUED' -or @($saved.Certificate.SubjectAlternativeNames) -notcontains $publicIp) {
-        throw 'The saved ACM certificate is not issued for the gateway IP; review it explicitly before replacement.'
+    if ($saved.Certificate.Status -cne 'ISSUED') {
+        throw 'The saved ACM certificate is not issued; review it explicitly before replacement.'
     }
     $pem = Invoke-CertificateAws -Arguments @('acm', 'get-certificate', '--certificate-arn', $state.CertificateArn) -AsJson
-    $null = Assert-CertificateChain -CertificatePem $pem.Certificate -ChainPem $pem.CertificateChain
+    $null = Assert-CertificateChain -CertificatePem $pem.Certificate -ChainPem $pem.CertificateChain -ExpectedFingerprint $state.CertificateFingerprintSha256
+    . (Join-Path $PSScriptRoot 'install-cloud-kong-tls.ps1')
+    Install-CloudKongTls -State $state -StatePath $StatePath -Kubeconfig $Kubeconfig -Context $Context -ValidateOnly
     Write-Host 'The saved production ACM certificate remains trusted and covers the approved window; no new issuance was requested.'
     return
 }
