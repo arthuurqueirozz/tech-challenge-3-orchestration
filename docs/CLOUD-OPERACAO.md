@@ -139,18 +139,26 @@ Os testes são executáveis xUnit; usar os comandos documentados, não inferir s
 Criar arquivo fora de qualquer checkout Git. Exemplo, a partir da orquestração:
 
 ```powershell
+$ErrorActionPreference = 'Stop'
+aws login --profile fiap-fase4 --region us-east-2
+if ($LASTEXITCODE -ne 0) { throw 'Conclua o login AWS antes de preparar a conta.' }
 $statePath = Join-Path ([IO.Path]::GetTempPath()) 'fcg-fase4-private/state.local.json'
 ./scripts/prepare-cloud-settings.ps1 -StatePath $statePath
 . ./scripts/cloud-common.ps1
 $state = ConvertFrom-CloudJson -Json (Get-Content -LiteralPath $statePath -Raw -Encoding UTF8)
-$state.AccountId = (& aws sts get-caller-identity --profile fiap-fase4 --query Account --output text).Trim() # conferir a conta autorizada no handoff privado
+$accountOutput = & aws sts get-caller-identity --profile fiap-fase4 --region us-east-2 --query Account --output text
+if ($LASTEXITCODE -ne 0) { throw 'STS falhou; o estado da conta não foi alterado.' }
+$observedAccount = ([string]$accountOutput).Trim()
+if ($observedAccount -cnotmatch '^[0-9]{12}$') { throw 'STS não retornou uma conta válida.' }
+if ($state.AccountId -and $state.AccountId -cne $observedAccount) { throw 'Conta diferente da configuração preservada; não sobrescrever.' }
+# No primeiro preenchimento, conferir no console a conta autorizada do projeto.
+$state.AccountId = $observedAccount
 Write-CloudJson -Path $statePath -Value $state
 ```
 
 A preparação gera apenas segredos ausentes, com RNG; não rotaciona os existentes. O exemplo usa a pasta temporária do usuário para evitar qualquer checkout Git, inclusive o marcador `.git` vazio do workspace original. Guardar cópia privada e preservá-la durante a demonstração: limpeza da pasta temporária pode apagar estado e material de recuperação. É possível escolher outra pasta privada persistente fora de qualquer árvore Git. Estado parcial/inválido deve ser recuperado, não regenerado por cima de SQL persistente. Arquivos são privados antes de receber conteúdo (ACL de usuário no Windows, modo 600/700 no Linux). Nunca imprimir `$state`, conteúdo de Secrets, kubeconfig raw, tokens ou senhas. O admin de demo usa e-mail sintético `admin@fcg.example.test`, não uma identidade de integrante.
 
 ```powershell
-aws login --profile fiap-fase4
 ./scripts/provision-cloud.ps1 -Stage Discover -StatePath $statePath
 ```
 
