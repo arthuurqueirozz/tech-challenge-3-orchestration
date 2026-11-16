@@ -90,6 +90,7 @@ $sqlImage = $sqlContainers[0].image
 # No actual credential is versioned in this SQL. All four values arrive as
 # Secret-backed environment variables, separate from SQLCMDPASSWORD used by sa.
 $sql = @'
+SET QUOTED_IDENTIFIER ON;
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
 DECLARE @lockResult int;
